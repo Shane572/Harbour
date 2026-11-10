@@ -24,7 +24,9 @@ Every push to `main` builds the app on GitHub and publishes it as a release.
 3. If Android asks, allow your browser to install apps ("Install unknown apps").
 4. Open Harbour and choose your comics folder.
 
-Later builds install straight over the top, keeping your folders and reading progress.
+After that, Harbour updates itself: when a newer build exists, the library shows
+**Update available**, and one tap downloads and installs it over the top, keeping your folders
+and reading progress. You can also check by hand under the settings (gear) button.
 
 ## Building it yourself
 

@@ -117,6 +117,12 @@ private fun LibraryGrid(vm: MainViewModel, onOpenFolders: () -> Unit) {
             )
         }
 
+        if (vm.update.showsBanner) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "update") {
+                UpdateBanner(vm)
+            }
+        }
+
         if (continueReading.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "continue") {
                 Column {
@@ -367,5 +373,9 @@ private fun FoldersSheet(vm: MainViewModel, onAddFolder: () -> Unit) {
             Spacer(Modifier.width(8.dp))
             Text("Add folder")
         }
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider(color = HarbourColors.Outline)
+        Spacer(Modifier.height(12.dp))
+        UpdateSettingsRow(vm)
     }
 }

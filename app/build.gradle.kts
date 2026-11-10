@@ -12,8 +12,10 @@ android {
         applicationId = "com.harbour.reader"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // GitHub builds are numbered; build N is versionCode N so the in-app updater can compare.
+        val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = buildNumber
+        versionName = "1.0.$buildNumber"
     }
 
     // A fixed key so every GitHub build installs as an update over the last one

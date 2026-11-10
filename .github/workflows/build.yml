@@ -36,6 +36,6 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: Harbour build ${{ github.run_number }}
-          body: Download Harbour.apk below and open it on your tablet to install or update.
+          body: Harbour updates itself from here. For a first install, download Harbour.apk below and open it on your tablet.
           files: Harbour.apk
           make_latest: true

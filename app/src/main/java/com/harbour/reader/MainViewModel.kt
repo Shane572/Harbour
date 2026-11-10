@@ -57,8 +57,42 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .map { it.first }
     }
 
+    private val updater = Updater(app)
+    val currentBuild: Int get() = updater.currentBuild
+    var update by mutableStateOf<UpdateState>(UpdateState.Idle)
+        private set
+
     init {
         if (roots.isNotEmpty()) rescan()
+        checkForUpdate(quiet = true)
+    }
+
+    // Updates
+
+    /** [quiet] keeps a failed check (e.g. offline) from showing an error on launch. */
+    fun checkForUpdate(quiet: Boolean = false) {
+        if (update is UpdateState.Checking || update is UpdateState.Downloading) return
+        viewModelScope.launch {
+            update = UpdateState.Checking
+            update = try {
+                updater.check()?.let { UpdateState.Available(it) } ?: UpdateState.UpToDate
+            } catch (e: Exception) {
+                if (quiet) UpdateState.Idle else UpdateState.Failed("Couldn't check for updates", null)
+            }
+        }
+    }
+
+    fun installUpdate(info: UpdateInfo) {
+        if (update is UpdateState.Downloading) return
+        viewModelScope.launch {
+            update = UpdateState.Downloading(info, 0f)
+            update = try {
+                updater.install(info) { p -> update = UpdateState.Downloading(info, p) }
+                UpdateState.Waiting(info)
+            } catch (e: Exception) {
+                UpdateState.Failed("Download failed. Check your connection and try again.", info)
+            }
+        }
     }
 
     // Folders
