@@ -142,9 +142,9 @@ fun FolderBrowserScreen(vm: MainViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             when (val n = listing?.comicsHere ?: 0) {
-                                0 -> "No comics directly in this folder. Subfolders are included too."
-                                1 -> "1 comic here, plus any in subfolders"
-                                else -> "$n comics here, plus any in subfolders"
+                                0 -> "Nothing directly in this folder. Subfolders are included too."
+                                1 -> "1 comic or book here, plus any in subfolders"
+                                else -> "$n comics and books here, plus any in subfolders"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = HarbourColors.Muted,

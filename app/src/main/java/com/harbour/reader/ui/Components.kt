@@ -25,13 +25,19 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.harbour.reader.Comic
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import com.harbour.reader.Book
 import com.harbour.reader.CoverCache
+import com.harbour.reader.LibraryItem
 
 val LocalCovers = staticCompositionLocalOf<CoverCache> { error("No cover cache provided") }
 
 @Composable
-fun CoverImage(comic: Comic?, modifier: Modifier = Modifier, corner: Dp = 10.dp) {
+fun CoverImage(comic: LibraryItem?, modifier: Modifier = Modifier, corner: Dp = 10.dp) {
     val covers = LocalCovers.current
     val bitmap by produceState<ImageBitmap?>(comic?.let { covers.peek(it) }, comic?.key) {
         if (comic != null && value == null) value = covers.load(comic)
@@ -51,6 +57,34 @@ fun CoverImage(comic: Comic?, modifier: Modifier = Modifier, corner: Dp = 10.dp)
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().alpha(alpha),
             )
+        } else if (comic is Book) {
+            // Books without a cover image get a simple title card.
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .padding(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    comic.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = HarbourColors.Text.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (comic.author.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        comic.author,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HarbourColors.Muted,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         } else if (comic != null) {
             Text(
                 comic.title.take(1).uppercase(),

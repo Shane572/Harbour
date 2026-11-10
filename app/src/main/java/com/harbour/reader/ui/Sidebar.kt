@@ -131,6 +131,9 @@ fun Sidebar(vm: MainViewModel) {
                 }
             }
 
+            NavItem(painterResource(R.drawable.ic_book), "Books", section == Section.Books, width, labels) {
+                vm.show(Section.Books)
+            }
             NavItem(rememberVectorPainter(Icons.Filled.Settings), "Settings", section == Section.Settings, width, labels) {
                 vm.show(Section.Settings)
             }

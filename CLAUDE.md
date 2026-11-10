@@ -1,6 +1,6 @@
 # Harbour
 
-Shane's personal comic reader for his Android tablet (Honor Pad 8, MagicUI / Android 12).
+Shane's personal comic and book reader for his Android tablet (Honor Pad 8, MagicUI / Android 12).
 Kotlin + Jetpack Compose, single activity, no Android Studio needed: GitHub Actions builds
 the release APK on every push to `main` and publishes it as a GitHub Release (`build-N`,
 versionCode N). Release, not debug: debug Compose builds are noticeably slower on the tablet.
@@ -29,7 +29,8 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   `file://` URIs; comics are opened straight from the file.
 - Compile locally before pushing when you can: `./gradlew assembleRelease` with `JAVA_HOME`
   set to a JDK 17 and `ANDROID_HOME` set to `%LOCALAPPDATA%\Android\Sdk`. Android Studio's
-  bundled JDK on Shane's PC is 25, which Gradle 8.11 can't run on.
+  bundled JDK on Shane's PC is 25, which Gradle 8.11 can't run on. Gradle also needs
+  `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=<short path without spaces>` on that PC.
 - Crashes are written to `filesDir/last_crash.txt` by `HarbourApp.kt` and shown on next launch
   with a Copy button. Ask Shane to paste that when something breaks.
 - Only touch this repository. Shane also has a company GitHub org (Kinore-Engineering); never
@@ -37,17 +38,25 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
 
 ## Map
 
-- `MainActivity.kt` — `HarbourRoot()` composable, screen switching, immersive reader mode
-- `MainViewModel.kt` — `Screen` back stack, library state, progress, updates, preview toggle
-- `LibraryRepository.kt` — saved folders, scanning for `.cbz`, library cache
-- `MiniZip.kt` / `ComicArchive.kt` — random-access ZIP reading straight from a file descriptor
-- `CoverCache.kt`, `ProgressStore.kt`, `Updater.kt`, `StorageAccess.kt`, `HarbourApp.kt`
-- `ui/` — `LibraryScreen`, `SeriesScreen`, `ReaderScreen`, `FolderBrowserScreen`, `UpdateUi`, theme
+- `MainActivity.kt` — `HarbourRoot()`: switches between `Screen`s, immersive mode while reading
+- `MainViewModel.kt` — `Screen` back stack, sidebar `Section`, library, groups, progress, settings
+- `Models.kt` — `Comic`, `Book` (both `LibraryItem`), `Group`, progress, setting enums
+- `LibraryRepository.kt` — saved folders, scanning for `.cbz`/`.cbr`/`.epub`, library caches
+- `GroupStore.kt` — Shane's own groups (`groups.json`). Groups are made by hand and are
+  deliberately unrelated to folders on disk; one group per comic.
+- `ComicArchive.kt` — CBZ via `MiniZip.kt`; CBR via libarchive, unpacked to `cache/cbr` (last 3 kept)
+- `EpubBook.kt` — EPUB container/OPF/spine/contents parsing
+- `CoverCache.kt`, `ProgressStore.kt` (comics + books), `Updater.kt`, `StorageAccess.kt`, `HarbourApp.kt`
+- `ui/` — `LibraryScreen` (main layout, Home, welcome), `Sidebar`, `ComicsSection` (grids,
+  selection, Add to group), `BooksSection`, `SettingsSection`, `ReaderScreen` (paged / two-page /
+  vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme
 
-## Current state (build 10)
+## Current state (build 13)
 
-Works: library of `.cbz` comics by folder/series with covers, continue reading, reader with
-swipe/tap/zoom/page slider, right-to-left per series, next issue, mark read, in-app updates.
+Works: collapsible sidebar (Home, All comics, Ungrouped, groups, Books, Settings); hand-made
+groups via long-press selection; CBZ and CBR comics; reader with direction per group (LTR, RTL,
+vertical/webtoon), one/two/auto pages, fit width, zoom, next issue; EPUB books with font, size,
+spacing, margins, page colour, contents and progress; accent colour, dark/black, cover size,
+sorting; in-app updates.
 
-Not yet: EPUB books, CBR, double-page spreads, webtoon scroll, theming. Shane wants to work on
-features and customisation next.
+Not yet: grouping books, text selection or footnote links in books, pinch zoom in vertical mode.

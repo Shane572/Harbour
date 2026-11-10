@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Collections
 
-/** Makes a small cover thumbnail from each comic's first page, cached on disk and in memory. */
+/** Small cover thumbnails (a comic's first page, a book's cover image), cached on disk and in memory. */
 class CoverCache(context: Context) {
     private val dir = File(context.cacheDir, "covers").apply { mkdirs() }
     private val memory = object : LruCache<String, ImageBitmap>(40 * 1024 * 1024) {
@@ -23,12 +23,12 @@ class CoverCache(context: Context) {
     private val failed: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
     private val gate = Semaphore(3)
 
-    private fun keyOf(c: Comic): String =
+    private fun keyOf(c: LibraryItem): String =
         "${c.key}|${c.size}|${c.modified}".hashCode().toUInt().toString(16)
 
-    fun peek(c: Comic): ImageBitmap? = memory.get(keyOf(c))
+    fun peek(c: LibraryItem): ImageBitmap? = memory.get(keyOf(c))
 
-    suspend fun load(c: Comic): ImageBitmap? {
+    suspend fun load(c: LibraryItem): ImageBitmap? {
         val k = keyOf(c)
         memory.get(k)?.let { return it }
         if (k in failed) return null
@@ -46,8 +46,16 @@ class CoverCache(context: Context) {
         }
     }
 
-    private fun generate(c: Comic, out: File): Boolean = runCatching {
-        val page = ComicArchive.coverPage(c.file, 900L * 1400L) ?: return@runCatching false
+    private fun generate(c: LibraryItem, out: File): Boolean = runCatching {
+        val page = when (c) {
+            is Book -> EpubBook.open(c.file).use { book ->
+                book.coverPath?.let(book::read)?.let { bytes ->
+                    val opts = BitmapFactory.Options().apply { inSampleSize = sampleFor(bytes, 900L * 1400L) }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                }
+            }
+            else -> ComicArchive.coverPage(c.file, 900L * 1400L)
+        } ?: return@runCatching false
         val w = 360
         val h = (w * page.height.toFloat() / page.width).toInt().coerceIn(1, 1080)
         val thumb = Bitmap.createScaledBitmap(page, w, h, true)
@@ -55,4 +63,12 @@ class CoverCache(context: Context) {
         tmp.outputStream().use { thumb.compress(Bitmap.CompressFormat.JPEG, 85, it) }
         tmp.renameTo(out)
     }.getOrDefault(false)
+
+    private fun sampleFor(bytes: ByteArray, maxPixels: Long): Int {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (bounds.outWidth > 0 && (bounds.outWidth / sample).toLong() * (bounds.outHeight / sample) > maxPixels) sample *= 2
+        return sample
+    }
 }

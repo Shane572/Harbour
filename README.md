@@ -1,19 +1,20 @@
 # Harbour
 
-A sleek, dark comic reader for Android tablets. Point it at the folder your comics live in and it
-does the rest.
+A sleek, dark comic and book reader for Android tablets.
 
 ## What it does
 
-- **Your folders, your library.** Pick one or more folders. Harbour finds every `.cbz` inside them,
-  including subfolders, and each folder becomes a series.
-- **Covers and stacks.** Series show as cover stacks; issues sort naturally (2 comes before 10).
-- **Continue reading.** The home screen keeps your in-progress comics up front, with page progress.
-- **A proper reader.** Full screen, swipe or tap the edges to turn pages, tap the middle for
-  controls, pinch or double-tap to zoom, and a page slider for jumping around.
-- **Manga mode.** Switch any series to right-to-left; Harbour remembers it per series.
-- **Next issue.** On the last page, one tap opens the next issue in the series.
-- **Mark as read.** Long-press an issue to mark it read or unread.
+- **Your folders, your groups.** Point Harbour at the folders your comics and books live in. It finds
+  every `.cbz`, `.cbr` and `.epub` inside them. Folders don't decide anything: you make your own groups
+  by long-pressing comics to select them and tapping **Add to group**.
+- **A sidebar that gets out of the way.** Home, All comics, Ungrouped, your groups, Books and Settings,
+  collapsible down to an icon rail.
+- **A proper comic reader.** Full screen, swipe or tap the edges, pinch or double-tap to zoom, page
+  slider. Left to right, right to left (manga) or vertical scroll (webtoons), remembered per group.
+  One page, two pages, or two in landscape. Whole page or fit to width. Next issue on the last page.
+- **Books.** EPUBs open in a paginated reader with your choice of size, font, line spacing, margins
+  and page colour (dark, black, sepia, light), plus contents and a progress slider.
+- **Make it yours.** Accent colour, dark or pure black background, cover size, and sorting.
 
 ## Getting it onto your tablet
 

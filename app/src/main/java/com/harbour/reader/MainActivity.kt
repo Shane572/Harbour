@@ -27,6 +27,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.harbour.reader.ui.BookReaderScreen
 import com.harbour.reader.ui.CrashReportDialog
 import com.harbour.reader.ui.FolderBrowserScreen
 import com.harbour.reader.ui.HarbourTheme
@@ -63,7 +64,7 @@ fun HarbourRoot(vm: MainViewModel = viewModel()) {
     }
 
     BackHandler(enabled = vm.canGoBack) { vm.back() }
-    ImmersiveMode(enabled = vm.screen is Screen.Reader)
+    ImmersiveMode(enabled = vm.screen is Screen.Reader || vm.screen is Screen.BookReader)
 
     val holder = rememberSaveableStateHolder()
     CompositionLocalProvider(LocalCovers provides vm.covers) {
@@ -76,6 +77,7 @@ fun HarbourRoot(vm: MainViewModel = viewModel()) {
                 when (screen) {
                     Screen.Main -> if (vm.roots.isEmpty()) WelcomeScreen(vm) else MainScreen(vm)
                     is Screen.Reader -> ReaderScreen(vm, screen.comic)
+                    is Screen.BookReader -> BookReaderScreen(vm, screen.book)
                     Screen.Browse -> FolderBrowserScreen(vm)
                 }
             }

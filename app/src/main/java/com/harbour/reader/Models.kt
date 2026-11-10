@@ -3,23 +3,77 @@ package com.harbour.reader
 import android.net.Uri
 import java.io.File
 
+/** Anything in the library with a file and a cover: a comic or a book. */
+interface LibraryItem {
+    val uri: String
+    val name: String
+    val title: String
+    val key: String
+    val size: Long
+    val modified: Long
+    val file: File get() = File(Uri.parse(uri).path ?: "")
+}
+
 data class Comic(
-    val uri: String,
-    val name: String,
+    override val uri: String,
+    override val name: String,
     /** Where the file sits under its library folder. Only used for stable ids, never for display. */
     val folderPath: String,
-    val size: Long,
-    val modified: Long,
-) {
-    val title: String get() = name.substringBeforeLast('.')
-
-    val file: File get() = File(Uri.parse(uri).path ?: "")
+    override val size: Long,
+    override val modified: Long,
+) : LibraryItem {
+    override val title: String get() = name.substringBeforeLast('.')
 
     val folderName: String get() = folderPath.substringAfterLast('/')
 
     /** Stable id for progress, groups and settings. */
-    val key: String get() = "$folderPath/$name"
+    override val key: String get() = "$folderPath/$name"
 }
+
+data class Book(
+    override val uri: String,
+    override val name: String,
+    val folderPath: String,
+    override val size: Long,
+    override val modified: Long,
+    val bookTitle: String,
+    val author: String,
+) : LibraryItem {
+    override val title: String get() = bookTitle.ifBlank { name.substringBeforeLast('.') }
+
+    override val key: String get() = "book:$folderPath/$name"
+}
+
+/** Where you are in a book: a chapter (spine item) and how far through it. */
+data class BookProgress(val chapter: Int, val fraction: Float, val chapters: Int, val time: Long) {
+    val overall: Float get() = if (chapters <= 0) 0f else ((chapter + fraction) / chapters).coerceIn(0f, 1f)
+    val finished: Boolean get() = chapters > 0 && chapter >= chapters - 1 && fraction >= 0.99f
+}
+
+enum class BookTheme(val label: String, val background: Long, val text: Long) {
+    Dark("Dark", 0xFF121214, 0xFFD9D6CF),
+    Black("Black", 0xFF000000, 0xFFCFCCC5),
+    Sepia("Sepia", 0xFFF3EAD7, 0xFF433422),
+    Light("Light", 0xFFFAFAF7, 0xFF1C1C1C),
+}
+
+enum class BookFont(val label: String, val css: String?) {
+    Original("Book's own", null),
+    Serif("Serif", "Georgia, 'Noto Serif', serif"),
+    Sans("Sans", "'Roboto', 'Noto Sans', sans-serif"),
+}
+
+enum class BookSpacing(val label: String, val lineHeight: Float) { Normal("Normal", 1.45f), Relaxed("Relaxed", 1.65f), Loose("Loose", 1.9f) }
+
+enum class BookMargins(val label: String, val px: Int) { Narrow("Narrow", 24), Normal("Normal", 48), Wide("Wide", 96) }
+
+data class BookStyle(
+    val sizePercent: Int = 110,
+    val font: BookFont = BookFont.Original,
+    val spacing: BookSpacing = BookSpacing.Normal,
+    val margins: BookMargins = BookMargins.Normal,
+    val theme: BookTheme = BookTheme.Dark,
+)
 
 /** A collection Shane makes himself. Groups have nothing to do with folders on disk. */
 data class Group(val id: String, val name: String, val keys: List<String>)

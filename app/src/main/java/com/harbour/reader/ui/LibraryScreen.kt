@@ -91,6 +91,7 @@ fun MainScreen(vm: MainViewModel) {
                             ComicsSection(vm, group.name, comics, group)
                         }
                     }
+                    Section.Books -> BooksSection(vm)
                     Section.Settings -> SettingsSection(vm)
                 }
             }

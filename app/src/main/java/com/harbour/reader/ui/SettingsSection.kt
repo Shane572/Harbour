@@ -68,7 +68,7 @@ fun SettingsSection(vm: MainViewModel) {
                         Column(Modifier.weight(1f)) {
                             Text(root.name, style = MaterialTheme.typography.titleMedium, color = HarbourColors.Text)
                             Text(
-                                "${vm.comicCountIn(root)} comics",
+                                "${vm.comicCountIn(root)} comics · ${vm.bookCountIn(root)} books",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = HarbourColors.Muted,
                             )

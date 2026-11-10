@@ -20,6 +20,7 @@ import java.util.UUID
 sealed interface Screen {
     data object Main : Screen
     data class Reader(val comic: Comic) : Screen
+    data class BookReader(val book: Book) : Screen
     data object Browse : Screen
 }
 
@@ -28,6 +29,7 @@ val Screen.stateKey: String
         Screen.Main -> "main"
         Screen.Browse -> "browse"
         is Screen.Reader -> "reader:${comic.key}"
+        is Screen.BookReader -> "book-reader:${book.key}"
     }
 
 /** What the library shows next to the sidebar. */
@@ -36,6 +38,7 @@ sealed interface Section {
     data object AllComics : Section
     data object Ungrouped : Section
     data class InGroup(val id: String) : Section
+    data object Books : Section
     data object Settings : Section
 }
 
@@ -45,6 +48,7 @@ val Section.stateKey: String
         Section.AllComics -> "all"
         Section.Ungrouped -> "ungrouped"
         is Section.InGroup -> "group:$id"
+        Section.Books -> "books"
         Section.Settings -> "settings"
     }
 
@@ -52,12 +56,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = LibraryRepository(app)
     private val groupStore = GroupStore(app)
     private val progressStore = ProgressStore(app)
+    private val bookProgressStore = BookProgressStore(app)
     private val settings = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val covers = CoverCache(app)
 
     var roots by mutableStateOf(repo.roots())
         private set
     var comics by mutableStateOf(repo.loadCached())
+        private set
+    var books by mutableStateOf(repo.loadCachedBooks())
         private set
     var groups by mutableStateOf(groupStore.load())
         private set
@@ -75,6 +82,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     val progress = mutableStateMapOf<String, Progress>().apply { putAll(progressStore.all()) }
+    val bookProgress = mutableStateMapOf<String, BookProgress>().apply { putAll(bookProgressStore.all()) }
     val backStack = mutableStateListOf<Screen>(Screen.Main)
     val screen: Screen get() = backStack.last()
     var section by mutableStateOf<Section>(Section.Home)
@@ -115,6 +123,66 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The line under a comic's title: its group, or its file's folder until it's grouped. */
     fun subtitleFor(c: Comic): String = groupOfKey[c.key]?.name ?: c.folderName
+
+    // Books
+
+    val continueBooks: List<Book> by derivedStateOf {
+        books.mapNotNull { b -> bookProgress[b.key]?.takeIf { !it.finished }?.let { b to it.time } }
+            .sortedByDescending { it.second }
+            .map { it.first }
+    }
+
+    fun sortedBooks(list: List<Book>): List<Book> = when (sort) {
+        SortOrder.Title -> list.sortedWith(compareBy(NaturalOrder) { it.title })
+        SortOrder.Added -> list.sortedByDescending { it.modified }
+        SortOrder.Read -> list.sortedByDescending { bookProgress[it.key]?.time ?: 0L }
+    }
+
+    fun openBook(b: Book) {
+        backStack.add(Screen.BookReader(b))
+    }
+
+    fun saveBookProgress(b: Book, chapter: Int, fraction: Float, chapters: Int) {
+        val p = BookProgress(chapter, fraction.coerceIn(0f, 1f), chapters, System.currentTimeMillis())
+        bookProgress[b.key] = p
+        bookProgressStore.save(b.key, p)
+    }
+
+    fun setBookRead(keys: Collection<String>, read: Boolean) {
+        for (key in keys) {
+            if (read) {
+                val chapters = (bookProgress[key]?.chapters ?: 1).coerceAtLeast(1)
+                val done = BookProgress(chapters - 1, 1f, chapters, System.currentTimeMillis())
+                bookProgress[key] = done
+                bookProgressStore.save(key, done)
+            } else {
+                bookProgress.remove(key)
+                bookProgressStore.clear(key)
+            }
+        }
+    }
+
+    var bookStyle by mutableStateOf(
+        BookStyle(
+            sizePercent = settings.getInt("bookSize", 110),
+            font = enumValueOr(settings.getString("bookFont", null), BookFont.Original),
+            spacing = enumValueOr(settings.getString("bookSpacing", null), BookSpacing.Normal),
+            margins = enumValueOr(settings.getString("bookMargins", null), BookMargins.Normal),
+            theme = enumValueOr(settings.getString("bookTheme", null), BookTheme.Dark),
+        ),
+    )
+        private set
+
+    fun changeBookStyle(style: BookStyle) {
+        bookStyle = style.copy(sizePercent = style.sizePercent.coerceIn(60, 220))
+        settings.edit()
+            .putInt("bookSize", bookStyle.sizePercent)
+            .putString("bookFont", style.font.name)
+            .putString("bookSpacing", style.spacing.name)
+            .putString("bookMargins", style.margins.name)
+            .putString("bookTheme", style.theme.name)
+            .apply()
+    }
 
     // Look and feel
 
@@ -207,6 +275,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun comicCountIn(root: LibraryRoot): Int = comics.count { it.uri.startsWith(root.uri + "/") }
 
+    fun bookCountIn(root: LibraryRoot): Int = books.count { it.uri.startsWith(root.uri + "/") }
+
     fun rescan() {
         if (scanning) return
         viewModelScope.launch {
@@ -214,6 +284,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val result = repo.scan(roots)
                 comics = result.comics
+                books = result.books
                 if (result.failed.isNotEmpty()) {
                     message = "Lost access to ${result.failed.joinToString { it.name }}. Remove it and add it again."
                 }
