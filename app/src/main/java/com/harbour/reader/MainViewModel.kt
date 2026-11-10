@@ -17,11 +17,13 @@ sealed interface Screen {
     data object Library : Screen
     data class SeriesView(val path: String) : Screen
     data class Reader(val comic: Comic) : Screen
+    data object Browse : Screen
 }
 
 val Screen.stateKey: String
     get() = when (this) {
         Screen.Library -> "library"
+        Screen.Browse -> "browse"
         is Screen.SeriesView -> "series:$path"
         is Screen.Reader -> "reader:${comic.key}"
     }
@@ -39,6 +41,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var scanning by mutableStateOf(false)
         private set
     var message by mutableStateOf<String?>(null)
+
+    /** Details of the last crash, shown once so they can be copied and sent. */
+    var crashReport by mutableStateOf(CrashLog.read(app))
+        private set
+
+    fun dismissCrashReport() {
+        CrashLog.clear(getApplication())
+        crashReport = null
+    }
 
     val progress = mutableStateMapOf<String, Progress>().apply { putAll(progressStore.all()) }
     val backStack = mutableStateListOf<Screen>(Screen.Library)
@@ -113,6 +124,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             message = "Couldn't get access to that folder"
         }
+    }
+
+    fun openBrowser() {
+        if (screen !is Screen.Browse) backStack.add(Screen.Browse)
+    }
+
+    fun addFileRoot(dir: java.io.File) {
+        roots = repo.addFileRoot(dir)
+        backStack.removeAll { it is Screen.Browse }
+        rescan()
     }
 
     fun removeRoot(root: LibraryRoot) {

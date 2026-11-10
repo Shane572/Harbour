@@ -45,6 +45,14 @@ class LibraryRepository(private val context: Context) {
         return updated
     }
 
+    fun addFileRoot(dir: File): List<LibraryRoot> {
+        val uri = Uri.fromFile(dir).toString()
+        val name = dir.name.ifEmpty { "Storage" }
+        val updated = roots().filterNot { it.uri == uri } + LibraryRoot(uri, name)
+        saveRoots(updated)
+        return updated
+    }
+
     fun removeRoot(root: LibraryRoot): List<LibraryRoot> {
         runCatching {
             context.contentResolver.releasePersistableUriPermission(
@@ -96,8 +104,14 @@ class LibraryRepository(private val context: Context) {
         val failed = mutableListOf<LibraryRoot>()
         for (root in roots) {
             try {
-                val tree = Uri.parse(root.uri)
-                walk(tree, DocumentsContract.getTreeDocumentId(tree), root.name, found)
+                val uri = Uri.parse(root.uri)
+                if (uri.scheme == "file") {
+                    val dir = File(uri.path ?: "")
+                    if (!dir.isDirectory || dir.listFiles() == null) throw SecurityException("Can't read ${dir.path}")
+                    walkFiles(dir, root.name, found)
+                } else {
+                    walk(uri, DocumentsContract.getTreeDocumentId(uri), root.name, found)
+                }
             } catch (e: Exception) {
                 failed += root
             }
@@ -134,6 +148,26 @@ class LibraryRepository(private val context: Context) {
             }
         }
         for ((id, name) in dirs) walk(tree, id, "$path/$name", out)
+    }
+
+    /** Same as [walk], for folders picked with Harbour's own browser (plain storage paths). */
+    private fun walkFiles(dir: File, path: String, out: MutableList<Comic>) {
+        val children = dir.listFiles() ?: return
+        for (f in children) {
+            if (f.name.startsWith(".")) continue
+            if (f.isDirectory) {
+                walkFiles(f, "$path/${f.name}", out)
+            } else if (f.name.endsWith(".cbz", ignoreCase = true)) {
+                out += Comic(
+                    uri = Uri.fromFile(f).toString(),
+                    name = f.name,
+                    seriesPath = path,
+                    seriesName = path.substringAfterLast('/'),
+                    size = f.length(),
+                    modified = f.lastModified(),
+                )
+            }
+        }
     }
 
     private companion object {

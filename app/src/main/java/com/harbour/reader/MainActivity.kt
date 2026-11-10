@@ -1,6 +1,7 @@
 package com.harbour.reader
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Color
@@ -29,6 +30,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.harbour.reader.ui.FolderBrowserScreen
 import com.harbour.reader.ui.HarbourTheme
 import com.harbour.reader.ui.LibraryScreen
 import com.harbour.reader.ui.LocalCovers
@@ -56,7 +58,14 @@ fun HarbourApp(vm: MainViewModel = viewModel()) {
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) vm.addRoot(uri)
     }
-    val addFolder = { pickFolder.launch(null) }
+    // Some tablets (e.g. Amazon Fire) have no system folder picker; use Harbour's own instead.
+    val addFolder = {
+        try {
+            pickFolder.launch(null)
+        } catch (e: ActivityNotFoundException) {
+            vm.openBrowser()
+        }
+    }
 
     val msg = vm.message
     LaunchedEffect(msg) {
@@ -81,6 +90,7 @@ fun HarbourApp(vm: MainViewModel = viewModel()) {
                     Screen.Library -> LibraryScreen(vm, onAddFolder = addFolder)
                     is Screen.SeriesView -> SeriesScreen(vm, screen.path)
                     is Screen.Reader -> ReaderScreen(vm, screen.comic)
+                    Screen.Browse -> FolderBrowserScreen(vm)
                 }
             }
         }

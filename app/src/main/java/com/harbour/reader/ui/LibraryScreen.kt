@@ -44,14 +44,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,7 +79,7 @@ fun LibraryScreen(vm: MainViewModel, onAddFolder: () -> Unit) {
             .background(HarbourColors.Bg),
     ) {
         if (vm.roots.isEmpty()) {
-            EmptyLibrary(onAddFolder)
+            EmptyLibrary(onAddFolder, onBrowse = vm::openBrowser)
         } else {
             LibraryGrid(vm, onOpenFolders = { showFolders = true })
         }
@@ -81,12 +90,64 @@ fun LibraryScreen(vm: MainViewModel, onAddFolder: () -> Unit) {
             onDismissRequest = { showFolders = false },
             containerColor = HarbourColors.Surface,
         ) {
-            FoldersSheet(vm, onAddFolder = {
-                showFolders = false
-                onAddFolder()
-            })
+            FoldersSheet(
+                vm,
+                onAddFolder = {
+                    showFolders = false
+                    onAddFolder()
+                },
+                onBrowse = {
+                    showFolders = false
+                    vm.openBrowser()
+                },
+            )
         }
     }
+
+    vm.crashReport?.let { report -> CrashReportDialog(report, onDismiss = vm::dismissCrashReport) }
+}
+
+@Composable
+private fun CrashReportDialog(report: String, onDismiss: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = HarbourColors.Surface,
+        title = { Text("Harbour closed unexpectedly", color = HarbourColors.Text) },
+        text = {
+            Column {
+                Text(
+                    "Copy these details and send them to Claude so it can fix the problem.",
+                    color = HarbourColors.Muted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    report,
+                    color = HarbourColors.Text,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier
+                        .heightIn(max = 280.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(HarbourColors.Bg)
+                        .verticalScroll(rememberScrollState())
+                        .padding(12.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                clipboard.setText(AnnotatedString(report))
+                copied = true
+            }) {
+                Text(if (copied) "Copied" else "Copy details", color = HarbourColors.Accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = HarbourColors.Muted) }
+        },
+    )
 }
 
 @Composable
@@ -299,7 +360,7 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun EmptyLibrary(onAddFolder: () -> Unit) {
+private fun EmptyLibrary(onAddFolder: () -> Unit, onBrowse: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -332,11 +393,15 @@ private fun EmptyLibrary(onAddFolder: () -> Unit) {
         ) {
             Text("Choose folder", style = MaterialTheme.typography.titleSmall)
         }
+        Spacer(Modifier.height(10.dp))
+        TextButton(onClick = onBrowse) {
+            Text("Having trouble? Browse your storage instead", color = HarbourColors.Muted)
+        }
     }
 }
 
 @Composable
-private fun FoldersSheet(vm: MainViewModel, onAddFolder: () -> Unit) {
+private fun FoldersSheet(vm: MainViewModel, onAddFolder: () -> Unit, onBrowse: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -368,10 +433,16 @@ private fun FoldersSheet(vm: MainViewModel, onAddFolder: () -> Unit) {
             HorizontalDivider(color = HarbourColors.Outline)
         }
         Spacer(Modifier.height(20.dp))
-        OutlinedButton(onClick = onAddFolder) {
-            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = onAddFolder) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Add folder")
+            }
             Spacer(Modifier.width(8.dp))
-            Text("Add folder")
+            TextButton(onClick = onBrowse) {
+                Text("Browse storage", color = HarbourColors.Muted)
+            }
         }
         Spacer(Modifier.height(24.dp))
         HorizontalDivider(color = HarbourColors.Outline)
