@@ -1,7 +1,6 @@
 package com.harbour.reader
 
 import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Color
@@ -10,10 +9,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -46,26 +43,15 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             HarbourTheme {
-                HarbourApp()
+                HarbourRoot()
             }
         }
     }
 }
 
 @Composable
-fun HarbourApp(vm: MainViewModel = viewModel()) {
+fun HarbourRoot(vm: MainViewModel = viewModel()) {
     val context = LocalContext.current
-    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) vm.addRoot(uri)
-    }
-    // Some tablets (e.g. Amazon Fire) have no system folder picker; use Harbour's own instead.
-    val addFolder = {
-        try {
-            pickFolder.launch(null)
-        } catch (e: ActivityNotFoundException) {
-            vm.openBrowser()
-        }
-    }
 
     val msg = vm.message
     LaunchedEffect(msg) {
@@ -87,7 +73,7 @@ fun HarbourApp(vm: MainViewModel = viewModel()) {
         ) { screen ->
             holder.SaveableStateProvider(screen.stateKey) {
                 when (screen) {
-                    Screen.Library -> LibraryScreen(vm, onAddFolder = addFolder)
+                    Screen.Library -> LibraryScreen(vm)
                     is Screen.SeriesView -> SeriesScreen(vm, screen.path)
                     is Screen.Reader -> ReaderScreen(vm, screen.comic)
                     Screen.Browse -> FolderBrowserScreen(vm)

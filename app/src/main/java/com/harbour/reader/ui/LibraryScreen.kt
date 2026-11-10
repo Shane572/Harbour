@@ -70,7 +70,7 @@ import com.harbour.reader.Series
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(vm: MainViewModel, onAddFolder: () -> Unit) {
+fun LibraryScreen(vm: MainViewModel) {
     var showFolders by rememberSaveable { mutableStateOf(false) }
 
     Box(
@@ -79,7 +79,7 @@ fun LibraryScreen(vm: MainViewModel, onAddFolder: () -> Unit) {
             .background(HarbourColors.Bg),
     ) {
         if (vm.roots.isEmpty()) {
-            EmptyLibrary(vm, onAddFolder, onBrowse = vm::openBrowser)
+            EmptyLibrary(vm, onBrowse = vm::openBrowser)
         } else {
             LibraryGrid(vm, onOpenFolders = { showFolders = true })
         }
@@ -92,10 +92,6 @@ fun LibraryScreen(vm: MainViewModel, onAddFolder: () -> Unit) {
         ) {
             FoldersSheet(
                 vm,
-                onAddFolder = {
-                    showFolders = false
-                    onAddFolder()
-                },
                 onBrowse = {
                     showFolders = false
                     vm.openBrowser()
@@ -360,7 +356,7 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun EmptyLibrary(vm: MainViewModel, onAddFolder: () -> Unit, onBrowse: () -> Unit) {
+private fun EmptyLibrary(vm: MainViewModel, onBrowse: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -396,15 +392,11 @@ private fun EmptyLibrary(vm: MainViewModel, onAddFolder: () -> Unit, onBrowse: (
         ) {
             Text("Choose folder", style = MaterialTheme.typography.titleSmall)
         }
-        Spacer(Modifier.height(10.dp))
-        TextButton(onClick = onAddFolder) {
-            Text("Use Android's folder picker instead", color = HarbourColors.Muted)
-        }
     }
 }
 
 @Composable
-private fun FoldersSheet(vm: MainViewModel, onAddFolder: () -> Unit, onBrowse: () -> Unit) {
+private fun FoldersSheet(vm: MainViewModel, onBrowse: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -436,16 +428,10 @@ private fun FoldersSheet(vm: MainViewModel, onAddFolder: () -> Unit, onBrowse: (
             HorizontalDivider(color = HarbourColors.Outline)
         }
         Spacer(Modifier.height(20.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onBrowse) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Add folder")
-            }
+        OutlinedButton(onClick = onBrowse) {
+            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            TextButton(onClick = onAddFolder) {
-                Text("Use Android's picker", color = HarbourColors.Muted)
-            }
+            Text("Add folder")
         }
         Spacer(Modifier.height(24.dp))
         HorizontalDivider(color = HarbourColors.Outline)
