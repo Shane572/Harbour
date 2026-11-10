@@ -10,26 +10,47 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.harbour.reader.ui.AccentChoice
+import com.harbour.reader.ui.HarbourColors
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.UUID
 
+/** Full-screen places. The library itself is one screen with a sidebar of [Section]s. */
 sealed interface Screen {
-    data object Library : Screen
-    data class SeriesView(val path: String) : Screen
+    data object Main : Screen
     data class Reader(val comic: Comic) : Screen
     data object Browse : Screen
 }
 
 val Screen.stateKey: String
     get() = when (this) {
-        Screen.Library -> "library"
+        Screen.Main -> "main"
         Screen.Browse -> "browse"
-        is Screen.SeriesView -> "series:$path"
         is Screen.Reader -> "reader:${comic.key}"
+    }
+
+/** What the library shows next to the sidebar. */
+sealed interface Section {
+    data object Home : Section
+    data object AllComics : Section
+    data object Ungrouped : Section
+    data class InGroup(val id: String) : Section
+    data object Settings : Section
+}
+
+val Section.stateKey: String
+    get() = when (this) {
+        Section.Home -> "home"
+        Section.AllComics -> "all"
+        Section.Ungrouped -> "ungrouped"
+        is Section.InGroup -> "group:$id"
+        Section.Settings -> "settings"
     }
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = LibraryRepository(app)
+    private val groupStore = GroupStore(app)
     private val progressStore = ProgressStore(app)
     private val settings = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val covers = CoverCache(app)
@@ -37,6 +58,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var roots by mutableStateOf(repo.roots())
         private set
     var comics by mutableStateOf(repo.loadCached())
+        private set
+    var groups by mutableStateOf(groupStore.load())
         private set
     var scanning by mutableStateOf(false)
         private set
@@ -52,14 +75,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     val progress = mutableStateMapOf<String, Progress>().apply { putAll(progressStore.all()) }
-    val backStack = mutableStateListOf<Screen>(Screen.Library)
+    val backStack = mutableStateListOf<Screen>(Screen.Main)
     val screen: Screen get() = backStack.last()
+    var section by mutableStateOf<Section>(Section.Home)
+        private set
 
-    val series: List<Series> by derivedStateOf {
-        comics.groupBy { it.seriesPath }
-            .map { (path, list) -> Series(path, list.first().seriesName, list) }
-            .sortedWith(compareBy(NaturalOrder) { it.name })
+    // Library views
+
+    val comicsByKey: Map<String, Comic> by derivedStateOf { comics.associateBy { it.key } }
+
+    val groupOfKey: Map<String, Group> by derivedStateOf {
+        buildMap { groups.forEach { g -> g.keys.forEach { put(it, g) } } }
     }
+
+    val sortedGroups: List<Group> by derivedStateOf { groups.sortedWith(compareBy(NaturalOrder) { it.name }) }
+
+    val ungrouped: List<Comic> by derivedStateOf { comics.filter { it.key !in groupOfKey } }
 
     val continueReading: List<Comic> by derivedStateOf {
         comics.mapNotNull { c -> progress[c.key]?.takeIf { !it.finished }?.let { c to it.time } }
@@ -68,16 +99,68 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .map { it.first }
     }
 
+    val recentlyAdded: List<Comic> by derivedStateOf { comics.sortedByDescending { it.modified }.take(20) }
+
+    fun groupById(id: String): Group? = groups.firstOrNull { it.id == id }
+
+    /** A group's comics in reading order (natural title order), skipping files that have gone. */
+    fun comicsIn(g: Group): List<Comic> =
+        g.keys.mapNotNull { comicsByKey[it] }.sortedWith(compareBy(NaturalOrder) { it.name })
+
+    fun sorted(list: List<Comic>): List<Comic> = when (sort) {
+        SortOrder.Title -> list.sortedWith(compareBy(NaturalOrder) { it.name })
+        SortOrder.Added -> list.sortedByDescending { it.modified }
+        SortOrder.Read -> list.sortedByDescending { progress[it.key]?.time ?: 0L }
+    }
+
+    /** The line under a comic's title: its group, or its file's folder until it's grouped. */
+    fun subtitleFor(c: Comic): String = groupOfKey[c.key]?.name ?: c.folderName
+
+    // Look and feel
+
+    var sidebarExpanded by mutableStateOf(settings.getBoolean("sidebarExpanded", true))
+        private set
+    var sort by mutableStateOf(enumValueOr(settings.getString("sort", null), SortOrder.Title))
+        private set
+    var coverSize by mutableStateOf(enumValueOr(settings.getString("coverSize", null), CoverSize.Medium))
+        private set
+
+    fun toggleSidebar() {
+        sidebarExpanded = !sidebarExpanded
+        settings.edit().putBoolean("sidebarExpanded", sidebarExpanded).apply()
+    }
+
+    fun changeSort(s: SortOrder) {
+        sort = s
+        settings.edit().putString("sort", s.name).apply()
+    }
+
+    fun changeCoverSize(s: CoverSize) {
+        coverSize = s
+        settings.edit().putString("coverSize", s.name).apply()
+    }
+
+    fun changeAccent(a: AccentChoice) {
+        HarbourColors.accent = a
+        settings.edit().putString("accent", a.name).apply()
+    }
+
+    fun changeBlackBackground(on: Boolean) {
+        HarbourColors.black = on
+        settings.edit().putBoolean("black", on).apply()
+    }
+
+    // Updates
+
     private val updater = Updater(app)
     val currentBuild: Int get() = updater.currentBuild
     var update by mutableStateOf<UpdateState>(UpdateState.Idle)
         private set
+
     init {
         if (roots.isNotEmpty()) rescan()
         checkForUpdate(quiet = true)
     }
-
-    // Updates
 
     /** [quiet] keeps a failed check (e.g. offline) from showing an error on launch. */
     fun checkForUpdate(quiet: Boolean = false) {
@@ -122,6 +205,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         rescan()
     }
 
+    fun comicCountIn(root: LibraryRoot): Int = comics.count { it.uri.startsWith(root.uri + "/") }
+
     fun rescan() {
         if (scanning) return
         viewModelScope.launch {
@@ -138,15 +223,58 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Groups
+
+    fun createGroup(name: String, keys: Collection<String> = emptyList()): Group {
+        val g = Group(UUID.randomUUID().toString(), name.trim().ifEmpty { "New group" }, emptyList())
+        groups = groups + g
+        if (keys.isEmpty()) groupStore.save(groups) else addToGroup(g.id, keys)
+        return g
+    }
+
+    fun renameGroup(id: String, name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        groups = groups.map { if (it.id == id) it.copy(name = clean) else it }
+        groupStore.save(groups)
+    }
+
+    fun deleteGroup(id: String) {
+        groups = groups.filterNot { it.id == id }
+        groupStore.save(groups)
+        if (section == Section.InGroup(id)) section = Section.Home
+    }
+
+    /** Moves comics into a group. A comic is only ever in one group. */
+    fun addToGroup(id: String, keys: Collection<String>) {
+        val moving = keys.toSet()
+        groups = groups.map { g ->
+            val kept = g.keys.filterNot { it in moving }
+            if (g.id == id) g.copy(keys = kept + moving) else g.copy(keys = kept)
+        }
+        groupStore.save(groups)
+    }
+
+    fun removeFromGroups(keys: Collection<String>) {
+        val leaving = keys.toSet()
+        groups = groups.map { g -> g.copy(keys = g.keys.filterNot { it in leaving }) }
+        groupStore.save(groups)
+    }
+
     // Navigation
 
-    fun back() {
-        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+    fun show(s: Section) {
+        section = s
     }
 
-    fun openSeries(s: Series) {
-        if (s.comics.size == 1) openComic(s.comics.first()) else backStack.add(Screen.SeriesView(s.path))
+    fun back() {
+        when {
+            backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
+            section != Section.Home -> section = Section.Home
+        }
     }
+
+    val canGoBack: Boolean get() = backStack.size > 1 || section != Section.Home
 
     fun openComic(c: Comic) {
         backStack.add(Screen.Reader(c))
@@ -156,10 +284,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         backStack[backStack.lastIndex] = Screen.Reader(c)
     }
 
-    fun seriesByPath(path: String): Series? = series.firstOrNull { it.path == path }
-
+    /** The next issue: next in the comic's group, or in its folder until it's been grouped. */
     fun nextComic(c: Comic): Comic? {
-        val list = comics.filter { it.seriesPath == c.seriesPath }
+        val list = groupOfKey[c.key]?.let(::comicsIn)
+            ?: comics.filter { it.folderPath == c.folderPath }.sortedWith(compareBy(NaturalOrder) { it.name })
         val i = list.indexOfFirst { it.key == c.key }
         return if (i < 0) null else list.getOrNull(i + 1)
     }
@@ -177,22 +305,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         progressStore.save(c.key, p)
     }
 
-    fun toggleRead(c: Comic) {
-        val p = progress[c.key]
-        if (p?.finished == true) {
-            progress.remove(c.key)
-            progressStore.clear(c.key)
-        } else {
-            val total = (p?.total ?: 1).coerceAtLeast(1)
-            saveProgress(c, total - 1, total)
+    fun setRead(keys: Collection<String>, read: Boolean) {
+        for (key in keys) {
+            val p = progress[key]
+            if (read) {
+                val total = (p?.total ?: 1).coerceAtLeast(1)
+                val done = Progress(total - 1, total, System.currentTimeMillis())
+                progress[key] = done
+                progressStore.save(key, done)
+            } else {
+                progress.remove(key)
+                progressStore.clear(key)
+            }
         }
     }
 
-    // Per-series reading direction (handy for manga)
+    // Reading direction, remembered per group (or per comic until it's grouped)
 
-    fun isRtl(seriesPath: String): Boolean = settings.getBoolean("rtl:$seriesPath", false)
+    private fun rtlKey(c: Comic): String = groupOfKey[c.key]?.let { "rtl:g:${it.id}" } ?: "rtl:c:${c.key}"
 
-    fun setRtl(seriesPath: String, rtl: Boolean) {
-        settings.edit().putBoolean("rtl:$seriesPath", rtl).apply()
+    fun isRtl(c: Comic): Boolean = settings.getBoolean(rtlKey(c), false)
+
+    fun setRtl(c: Comic, rtl: Boolean) {
+        settings.edit().putBoolean(rtlKey(c), rtl).apply()
     }
 }
+
+private inline fun <reified T : Enum<T>> enumValueOr(name: String?, default: T): T =
+    enumValues<T>().firstOrNull { it.name == name } ?: default

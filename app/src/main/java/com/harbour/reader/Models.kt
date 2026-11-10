@@ -6,8 +6,8 @@ import java.io.File
 data class Comic(
     val uri: String,
     val name: String,
-    val seriesPath: String,
-    val seriesName: String,
+    /** Where the file sits under its library folder. Only used for stable ids, never for display. */
+    val folderPath: String,
     val size: Long,
     val modified: Long,
 ) {
@@ -15,11 +15,14 @@ data class Comic(
 
     val file: File get() = File(Uri.parse(uri).path ?: "")
 
-    /** Stable id for progress and settings, independent of where the folder lives. */
-    val key: String get() = "$seriesPath/$name"
+    val folderName: String get() = folderPath.substringAfterLast('/')
+
+    /** Stable id for progress, groups and settings. */
+    val key: String get() = "$folderPath/$name"
 }
 
-data class Series(val path: String, val name: String, val comics: List<Comic>)
+/** A collection Shane makes himself. Groups have nothing to do with folders on disk. */
+data class Group(val id: String, val name: String, val keys: List<String>)
 
 data class Progress(val page: Int, val total: Int, val time: Long) {
     val finished: Boolean get() = total > 0 && page >= total - 1
@@ -27,6 +30,10 @@ data class Progress(val page: Int, val total: Int, val time: Long) {
 }
 
 data class LibraryRoot(val uri: String, val name: String)
+
+enum class SortOrder(val label: String) { Title("Title"), Added("Recently added"), Read("Recently read") }
+
+enum class CoverSize(val label: String) { Small("Small"), Medium("Medium"), Large("Large") }
 
 /** Sorts "Issue 2" before "Issue 10", ignoring case. */
 object NaturalOrder : Comparator<String> {

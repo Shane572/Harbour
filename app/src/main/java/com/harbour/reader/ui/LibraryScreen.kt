@@ -9,18 +9,20 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -29,156 +31,133 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.harbour.reader.Comic
+import com.harbour.reader.CoverSize
+import com.harbour.reader.Group
 import com.harbour.reader.MainViewModel
 import com.harbour.reader.Progress
-import com.harbour.reader.Series
+import com.harbour.reader.Section
+import com.harbour.reader.stateKey
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** The library: the sidebar on the left and the chosen section beside it. */
 @Composable
-fun LibraryScreen(vm: MainViewModel) {
-    var showFolders by rememberSaveable { mutableStateOf(false) }
-
-    Box(
+fun MainScreen(vm: MainViewModel) {
+    Row(
         Modifier
             .fillMaxSize()
             .background(HarbourColors.Bg),
     ) {
-        if (vm.roots.isEmpty()) {
-            EmptyLibrary(vm, onBrowse = vm::openBrowser)
-        } else {
-            LibraryGrid(vm, onOpenFolders = { showFolders = true })
-        }
-    }
-
-    if (showFolders) {
-        ModalBottomSheet(
-            onDismissRequest = { showFolders = false },
-            containerColor = HarbourColors.Surface,
+        Sidebar(vm)
+        VerticalDivider(color = HarbourColors.Outline)
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End)),
         ) {
-            FoldersSheet(
-                vm,
-                onBrowse = {
-                    showFolders = false
-                    vm.openBrowser()
-                },
-            )
+            val holder = rememberSaveableStateHolder()
+            val section = vm.section
+            holder.SaveableStateProvider(section.stateKey) {
+                when (section) {
+                    Section.Home -> HomeSection(vm)
+                    Section.AllComics -> ComicsSection(vm, "All comics", vm.comics, group = null)
+                    Section.Ungrouped -> ComicsSection(vm, "Ungrouped", vm.ungrouped, group = null)
+                    is Section.InGroup -> {
+                        val group = vm.groupById(section.id)
+                        if (group == null) {
+                            LaunchedEffect(section.id) { vm.show(Section.Home) }
+                        } else {
+                            val comics = remember(group, vm.comics) { vm.comicsIn(group) }
+                            ComicsSection(vm, group.name, comics, group)
+                        }
+                    }
+                    Section.Settings -> SettingsSection(vm)
+                }
+            }
         }
     }
-
-    vm.crashReport?.let { report -> CrashReportDialog(report, onDismiss = vm::dismissCrashReport) }
 }
 
+/** Top and bottom padding that keeps content clear of the status and navigation bars. */
 @Composable
-private fun CrashReportDialog(report: String, onDismiss: () -> Unit) {
-    val clipboard = LocalClipboardManager.current
-    var copied by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = HarbourColors.Surface,
-        title = { Text("Harbour closed unexpectedly", color = HarbourColors.Text) },
-        text = {
-            Column {
-                Text(
-                    "Copy these details and send them to Claude so it can fix the problem.",
-                    color = HarbourColors.Muted,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    report,
-                    color = HarbourColors.Text,
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier
-                        .heightIn(max = 280.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(HarbourColors.Bg)
-                        .verticalScroll(rememberScrollState())
-                        .padding(12.dp),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                clipboard.setText(AnnotatedString(report))
-                copied = true
-            }) {
-                Text(if (copied) "Copied" else "Copy details", color = HarbourColors.Accent)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Close", color = HarbourColors.Muted) }
-        },
+fun sectionPadding(top: Dp = 20.dp, bottom: Dp = 32.dp): PaddingValues {
+    val insets = WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical).asPaddingValues()
+    return PaddingValues(
+        start = 28.dp,
+        end = 28.dp,
+        top = insets.calculateTopPadding() + top,
+        bottom = insets.calculateBottomPadding() + bottom,
     )
 }
 
+fun CoverSize.minCell(): Dp = when (this) {
+    CoverSize.Small -> 112.dp
+    CoverSize.Medium -> 148.dp
+    CoverSize.Large -> 196.dp
+}
+
 @Composable
-private fun LibraryGrid(vm: MainViewModel, onOpenFolders: () -> Unit) {
-    val series = vm.series
+private fun HomeSection(vm: MainViewModel) {
+    val groups = vm.sortedGroups
     val continueReading = vm.continueReading
-    val insets = WindowInsets.safeDrawing.asPaddingValues()
 
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 148.dp),
-        contentPadding = PaddingValues(
-            start = 24.dp,
-            end = 24.dp,
-            top = insets.calculateTopPadding() + 20.dp,
-            bottom = insets.calculateBottomPadding() + 32.dp,
-        ),
+        columns = GridCells.Adaptive(minSize = vm.coverSize.minCell()),
+        contentPadding = sectionPadding(),
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalArrangement = Arrangement.spacedBy(26.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }, key = "header") {
-            Header(
-                comicCount = vm.comics.size,
-                seriesCount = series.size,
-                scanning = vm.scanning,
-                onRefresh = vm::rescan,
-                onFolders = onOpenFolders,
-            )
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Library", style = MaterialTheme.typography.displaySmall, color = HarbourColors.Text)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (vm.scanning && vm.comics.isEmpty()) "Looking for comics…"
+                        else "${vm.comics.size} comics · ${groups.size} groups",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = HarbourColors.Muted,
+                    )
+                }
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    if (vm.scanning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = HarbourColors.Accent,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        IconButton(onClick = vm::rescan) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Look for new comics", tint = HarbourColors.Muted)
+                        }
+                    }
+                }
+            }
         }
 
         if (vm.update.showsBanner) {
-            item(span = { GridItemSpan(maxLineSpan) }, key = "update") {
-                UpdateBanner(vm)
-            }
+            item(span = { GridItemSpan(maxLineSpan) }, key = "update") { UpdateBanner(vm) }
         }
 
         if (continueReading.isNotEmpty()) {
@@ -187,9 +166,56 @@ private fun LibraryGrid(vm: MainViewModel, onOpenFolders: () -> Unit) {
                     SectionLabel("Continue reading")
                     Spacer(Modifier.height(14.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        items(continueReading, key = { it.key }) { comic ->
-                            ContinueCard(comic, vm.progress[comic.key]) {
-                                vm.openComic(comic)
+                        items(continueReading, key = { it.uri }) { comic ->
+                            ContinueCard(comic, vm.subtitleFor(comic), vm.progress[comic.key]) { vm.openComic(comic) }
+                        }
+                    }
+                }
+            }
+        }
+
+        item(span = { GridItemSpan(maxLineSpan) }, key = "groups-label") { SectionLabel("Groups") }
+
+        if (groups.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "groups-hint") {
+                Hint(
+                    "Make your first group",
+                    "Open All comics or Ungrouped, long-press a comic to start selecting, tap the others " +
+                        "that belong together, then tap Add to group. You can also tap + next to Groups.",
+                )
+            }
+        }
+
+        items(groups, key = { it.id }) { g ->
+            val comics = remember(g, vm.comics) { vm.comicsIn(g) }
+            GroupCard(g, comics, readCount = comics.count { vm.progress[it.key]?.finished == true }) {
+                vm.show(Section.InGroup(g.id))
+            }
+        }
+
+        val recent = vm.recentlyAdded
+        if (recent.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "recent") {
+                Column {
+                    SectionLabel("Recently added")
+                    Spacer(Modifier.height(14.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        items(recent, key = { it.uri }) { comic ->
+                            Column(
+                                Modifier
+                                    .width(116.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { vm.openComic(comic) },
+                            ) {
+                                CoverImage(comic, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    comic.title,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = HarbourColors.Text,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                         }
                     }
@@ -197,75 +223,40 @@ private fun LibraryGrid(vm: MainViewModel, onOpenFolders: () -> Unit) {
             }
         }
 
-        item(span = { GridItemSpan(maxLineSpan) }, key = "series-label") {
-            SectionLabel(if (series.isEmpty() && !vm.scanning) "No comics found yet" else "Series")
-        }
-
-        if (series.isEmpty() && !vm.scanning) {
+        if (vm.comics.isEmpty() && !vm.scanning) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "nothing") {
-                Text(
-                    "Harbour looks for .cbz files in your folders and their subfolders. " +
-                        "Check the folder in settings, or tap refresh after adding files.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = HarbourColors.Muted,
+                Hint(
+                    "No comics found yet",
+                    "Harbour looks for .cbz files in your folders and everything inside them. " +
+                        "Check your folders in Settings, or tap refresh after adding files.",
                 )
             }
-        }
-
-        items(series, key = { it.path }) { s ->
-            val read = s.comics.count { vm.progress[it.key]?.finished == true }
-            SeriesCard(s, read) { vm.openSeries(s) }
         }
     }
 }
 
 @Composable
-private fun Header(
-    comicCount: Int,
-    seriesCount: Int,
-    scanning: Boolean,
-    onRefresh: () -> Unit,
-    onFolders: () -> Unit,
-) {
-    Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f)) {
-            Text("HARBOUR", style = MaterialTheme.typography.labelMedium, color = HarbourColors.Accent)
-            Spacer(Modifier.height(6.dp))
-            Text("Library", style = MaterialTheme.typography.displaySmall, color = HarbourColors.Text)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                if (scanning && comicCount == 0) "Looking for comics…"
-                else "$comicCount comics · $seriesCount series",
-                style = MaterialTheme.typography.bodyMedium,
-                color = HarbourColors.Muted,
-            )
-        }
-        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-            if (scanning) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = HarbourColors.Accent,
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                IconButton(onClick = onRefresh) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Rescan folders", tint = HarbourColors.Muted)
-                }
-            }
-        }
-        IconButton(onClick = onFolders) {
-            Icon(Icons.Filled.Settings, contentDescription = "Folders", tint = HarbourColors.Muted)
-        }
-    }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
+fun SectionLabel(text: String) {
     Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = HarbourColors.Muted)
 }
 
 @Composable
-private fun ContinueCard(comic: Comic, progress: Progress?, onClick: () -> Unit) {
+fun Hint(title: String, body: String) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(HarbourColors.Surface)
+            .padding(20.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = HarbourColors.Text)
+        Spacer(Modifier.height(4.dp))
+        Text(body, style = MaterialTheme.typography.bodyMedium, color = HarbourColors.Muted)
+    }
+}
+
+@Composable
+private fun ContinueCard(comic: Comic, subtitle: String, progress: Progress?, onClick: () -> Unit) {
     Row(
         Modifier
             .width(320.dp)
@@ -279,7 +270,7 @@ private fun ContinueCard(comic: Comic, progress: Progress?, onClick: () -> Unit)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f).fillMaxHeight().padding(vertical = 4.dp)) {
             Text(
-                comic.seriesName,
+                subtitle,
                 style = MaterialTheme.typography.labelSmall,
                 color = HarbourColors.Muted,
                 maxLines = 1,
@@ -307,8 +298,9 @@ private fun ContinueCard(comic: Comic, progress: Progress?, onClick: () -> Unit)
     }
 }
 
+/** A group shown as a little stack of covers. */
 @Composable
-private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
+private fun GroupCard(group: Group, comics: List<Comic>, readCount: Int, onClick: () -> Unit) {
     Column(
         Modifier
             .clip(RoundedCornerShape(12.dp))
@@ -319,8 +311,7 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .aspectRatio(0.64f),
         ) {
-            if (series.comics.size > 1) {
-                // A second "issue" peeking out behind the cover, so folders read as stacks.
+            if (comics.size > 1) {
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -330,15 +321,15 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
                 )
             }
             CoverImage(
-                series.comics.first(),
+                comics.firstOrNull(),
                 Modifier
                     .fillMaxSize()
-                    .padding(top = if (series.comics.size > 1) 7.dp else 0.dp),
+                    .padding(top = if (comics.size > 1) 7.dp else 0.dp),
             )
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            series.name,
+            group.name,
             style = MaterialTheme.typography.titleSmall,
             color = HarbourColors.Text,
             maxLines = 1,
@@ -346,7 +337,7 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
         )
         Text(
             buildString {
-                append(if (series.comics.size == 1) "1 issue" else "${series.comics.size} issues")
+                append(if (comics.size == 1) "1 comic" else "${comics.size} comics")
                 if (readCount > 0) append(" · $readCount read")
             },
             style = MaterialTheme.typography.labelSmall,
@@ -355,11 +346,13 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
     }
 }
 
+/** First run: no folders yet. */
 @Composable
-private fun EmptyLibrary(vm: MainViewModel, onBrowse: () -> Unit) {
+fun WelcomeScreen(vm: MainViewModel) {
     Column(
         Modifier
             .fillMaxSize()
+            .background(HarbourColors.Bg)
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -377,8 +370,8 @@ private fun EmptyLibrary(vm: MainViewModel, onBrowse: () -> Unit) {
         )
         Spacer(Modifier.height(14.dp))
         Text(
-            "Choose the folder where your comics live. Harbour finds every .cbz inside it, " +
-                "and each subfolder becomes a series.",
+            "Choose the folder where your comics live. Harbour finds every comic inside it, " +
+                "and you sort them into groups however you like.",
             style = MaterialTheme.typography.bodyLarge,
             color = HarbourColors.Muted,
             textAlign = TextAlign.Center,
@@ -386,56 +379,11 @@ private fun EmptyLibrary(vm: MainViewModel, onBrowse: () -> Unit) {
         )
         Spacer(Modifier.height(28.dp))
         Button(
-            onClick = onBrowse,
+            onClick = vm::openBrowser,
             colors = ButtonDefaults.buttonColors(containerColor = HarbourColors.Accent, contentColor = HarbourColors.OnAccent),
             contentPadding = PaddingValues(horizontal = 28.dp, vertical = 14.dp),
         ) {
             Text("Choose folder", style = MaterialTheme.typography.titleSmall)
         }
-    }
-}
-
-@Composable
-private fun FoldersSheet(vm: MainViewModel, onBrowse: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
-    ) {
-        Text("Folders", style = MaterialTheme.typography.titleLarge, color = HarbourColors.Text)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Harbour scans these folders and everything inside them.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = HarbourColors.Muted,
-        )
-        Spacer(Modifier.height(16.dp))
-        vm.roots.forEach { root ->
-            val count = vm.comics.count { it.seriesPath == root.name || it.seriesPath.startsWith(root.name + "/") }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(root.name, style = MaterialTheme.typography.titleMedium, color = HarbourColors.Text)
-                    Text("$count comics", style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted)
-                }
-                IconButton(onClick = { vm.removeRoot(root) }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Remove ${root.name}", tint = HarbourColors.Muted)
-                }
-            }
-            HorizontalDivider(color = HarbourColors.Outline)
-        }
-        Spacer(Modifier.height(20.dp))
-        OutlinedButton(onClick = onBrowse) {
-            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Add folder")
-        }
-        Spacer(Modifier.height(24.dp))
-        HorizontalDivider(color = HarbourColors.Outline)
-        Spacer(Modifier.height(12.dp))
-        UpdateSettingsRow(vm)
     }
 }

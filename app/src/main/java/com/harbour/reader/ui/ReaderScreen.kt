@@ -144,7 +144,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
     val count = archive.pageCount
     val pager = rememberPagerState(initialPage = vm.startPage(comic, count)) { count }
     val scope = rememberCoroutineScope()
-    var rtl by remember(comic.seriesPath) { mutableStateOf(vm.isRtl(comic.seriesPath)) }
+    var rtl by remember(comic.key) { mutableStateOf(vm.isRtl(comic)) }
     var showUi by remember { mutableStateOf(true) }
     var zoomed by remember { mutableStateOf(false) }
     val next = remember(comic.key) { vm.nextComic(comic) }
@@ -214,7 +214,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        comic.seriesName,
+                        vm.subtitleFor(comic),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.6f),
                         maxLines = 1,
@@ -223,7 +223,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
                 }
                 TextButton(onClick = {
                     rtl = !rtl
-                    vm.setRtl(comic.seriesPath, rtl)
+                    vm.setRtl(comic, rtl)
                 }) {
                     Text(
                         if (rtl) "Right to left" else "Left to right",

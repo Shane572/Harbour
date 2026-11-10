@@ -27,12 +27,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.harbour.reader.ui.CrashReportDialog
 import com.harbour.reader.ui.FolderBrowserScreen
 import com.harbour.reader.ui.HarbourTheme
-import com.harbour.reader.ui.LibraryScreen
 import com.harbour.reader.ui.LocalCovers
+import com.harbour.reader.ui.MainScreen
 import com.harbour.reader.ui.ReaderScreen
-import com.harbour.reader.ui.SeriesScreen
+import com.harbour.reader.ui.WelcomeScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,7 +62,7 @@ fun HarbourRoot(vm: MainViewModel = viewModel()) {
         }
     }
 
-    BackHandler(enabled = vm.backStack.size > 1) { vm.back() }
+    BackHandler(enabled = vm.canGoBack) { vm.back() }
     ImmersiveMode(enabled = vm.screen is Screen.Reader)
 
     val holder = rememberSaveableStateHolder()
@@ -73,14 +74,15 @@ fun HarbourRoot(vm: MainViewModel = viewModel()) {
         ) { screen ->
             holder.SaveableStateProvider(screen.stateKey) {
                 when (screen) {
-                    Screen.Library -> LibraryScreen(vm)
-                    is Screen.SeriesView -> SeriesScreen(vm, screen.path)
+                    Screen.Main -> if (vm.roots.isEmpty()) WelcomeScreen(vm) else MainScreen(vm)
                     is Screen.Reader -> ReaderScreen(vm, screen.comic)
                     Screen.Browse -> FolderBrowserScreen(vm)
                 }
             }
         }
     }
+
+    vm.crashReport?.let { report -> CrashReportDialog(report, onDismiss = vm::dismissCrashReport) }
 }
 
 /** Hides the status and navigation bars and keeps the screen awake while reading. */

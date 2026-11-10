@@ -10,7 +10,7 @@ import java.io.File
 
 class ScanResult(val comics: List<Comic>, val failed: List<LibraryRoot>)
 
-/** Remembers the folders you've picked and finds every .cbz inside them. */
+/** Remembers the folders you've picked and finds every comic inside them. Folders only decide where to look. */
 class LibraryRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("library", Context.MODE_PRIVATE)
     private val cacheFile = File(context.filesDir, "library.json")
@@ -54,8 +54,7 @@ class LibraryRepository(private val context: Context) {
             Comic(
                 uri = o.getString("uri"),
                 name = o.getString("name"),
-                seriesPath = o.getString("path"),
-                seriesName = o.getString("series"),
+                folderPath = o.getString("path"),
                 size = o.optLong("size"),
                 modified = o.optLong("mod"),
             )
@@ -67,8 +66,8 @@ class LibraryRepository(private val context: Context) {
         comics.forEach {
             arr.put(
                 JSONObject()
-                    .put("uri", it.uri).put("name", it.name).put("path", it.seriesPath)
-                    .put("series", it.seriesName).put("size", it.size).put("mod", it.modified),
+                    .put("uri", it.uri).put("name", it.name).put("path", it.folderPath)
+                    .put("size", it.size).put("mod", it.modified),
             )
         }
         runCatching { cacheFile.writeText(arr.toString()) }
@@ -87,10 +86,7 @@ class LibraryRepository(private val context: Context) {
             }
             walk(dir, root.name, found)
         }
-        val sorted = found.sortedWith { a, b ->
-            val c = NaturalOrder.compare(a.seriesPath, b.seriesPath)
-            if (c != 0) c else NaturalOrder.compare(a.name, b.name)
-        }
+        val sorted = found.sortedWith(compareBy(NaturalOrder) { it.name })
         saveCache(sorted)
         ScanResult(sorted, failed)
     }
@@ -105,8 +101,7 @@ class LibraryRepository(private val context: Context) {
                 out += Comic(
                     uri = Uri.fromFile(f).toString(),
                     name = f.name,
-                    seriesPath = path,
-                    seriesName = path.substringAfterLast('/'),
+                    folderPath = path,
                     size = f.length(),
                     modified = f.lastModified(),
                 )

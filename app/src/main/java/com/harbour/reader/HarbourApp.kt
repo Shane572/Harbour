@@ -4,12 +4,22 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
+import com.harbour.reader.ui.AccentChoices
+import com.harbour.reader.ui.HarbourColors
 import java.io.File
 
-/** Saves the details of any crash so Harbour can show them (and you can copy them) next launch. */
+/**
+ * Saves the details of any crash so Harbour can show them (and you can copy them) next launch,
+ * and applies the saved colours before anything is drawn.
+ */
 class HarbourApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        val settings = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        HarbourColors.accent = AccentChoices.firstOrNull { it.name == settings.getString("accent", null) }
+            ?: AccentChoices.first()
+        HarbourColors.black = settings.getBoolean("black", false)
+
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             runCatching { CrashLog.write(this, error) }
