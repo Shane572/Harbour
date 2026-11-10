@@ -14,7 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,9 +50,13 @@ val LocalCovers = staticCompositionLocalOf<CoverCache> { error("No cover cache p
 @Composable
 fun CoverImage(comic: LibraryItem?, modifier: Modifier = Modifier, corner: Dp = 10.dp) {
     val covers = LocalCovers.current
-    val bitmap by produceState<ImageBitmap?>(comic?.let { covers.peek(it) }, comic?.key) {
-        if (comic != null && value == null) value = covers.load(comic)
+    // Keyed on the item, so a slot that switches to a different comic (e.g. a new group cover)
+    // drops the old picture straight away instead of keeping it until the app restarts.
+    val state = remember(comic?.key) { mutableStateOf(comic?.let { covers.peek(it) }) }
+    LaunchedEffect(comic?.key) {
+        if (comic != null && state.value == null) state.value = covers.load(comic)
     }
+    val bitmap = state.value
     val alpha by animateFloatAsState(if (bitmap != null) 1f else 0f, tween(280), label = "cover")
 
     Box(

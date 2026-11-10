@@ -185,37 +185,6 @@ fun ComicsSection(
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            if (upNext != null && !selecting) {
-                item(span = { GridItemSpan(maxLineSpan) }, key = "resume") {
-                    val started = vm.progress[upNext.key] != null
-                    Column {
-                        Button(
-                            onClick = { vm.openComic(upNext) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = HarbourColors.Accent,
-                                contentColor = HarbourColors.OnAccent,
-                            ),
-                            contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp),
-                        ) {
-                            Text(
-                                (if (started) "Continue · " else "Up next · ") + upNext.title,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                        }
-                        if (readOrder.isEmpty() && comics.size > 1) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                "Tip: long-press issues and tap Add to read order to line up what you read next.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = HarbourColors.Muted,
-                            )
-                        }
-                    }
-                }
-            }
-
             if (readOrder.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "order-label") {
                     val read = readOrder.count { vm.progress[it.key]?.finished == true }
