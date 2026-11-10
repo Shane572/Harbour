@@ -139,7 +139,7 @@ fun UpdateSettingsRow(vm: MainViewModel) {
         Spacer(Modifier.width(12.dp))
         Switch(
             checked = vm.previewBuilds,
-            onCheckedChange = { vm.setPreviewBuilds(it) },
+            onCheckedChange = { vm.changePreviewBuilds(it) },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = HarbourColors.OnAccent,
                 checkedTrackColor = HarbourColors.Accent,

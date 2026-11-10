@@ -64,7 +64,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var previewBuilds by mutableStateOf(settings.getBoolean("previewBuilds", false))
         private set
 
-    fun setPreviewBuilds(on: Boolean) {
+    fun changePreviewBuilds(on: Boolean) {
         previewBuilds = on
         settings.edit().putBoolean("previewBuilds", on).apply()
         update = UpdateState.Idle
