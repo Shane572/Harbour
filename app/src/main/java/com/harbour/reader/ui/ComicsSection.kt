@@ -117,6 +117,18 @@ fun ComicsSection(
                 add("Move later in read order" to { vm.moveInReadOrder(group.id, only, 1) })
             }
         }
+        if (selected.any { !vm.isWillRead(it) }) {
+            add("Add to Will Read" to {
+                vm.addToWillRead(selected)
+                done()
+            })
+        }
+        if (selected.any { vm.isWillRead(it) }) {
+            add("Remove from Will Read" to {
+                vm.removeFromWillRead(selected)
+                done()
+            })
+        }
         val single = selected.singleOrNull()
         if (single != null && single in vm.groupOfKey) {
             add("Set as group cover" to {
@@ -251,7 +263,7 @@ fun ComicsSection(
     if (picking) {
         AddToGroupDialog(
             count = selected.size,
-            groups = vm.sortedGroups,
+            groups = vm.orderedGroups,
             onDismiss = { picking = false },
             onPick = { g ->
                 vm.addToGroup(g.id, selected)

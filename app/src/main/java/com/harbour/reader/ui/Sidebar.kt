@@ -6,6 +6,18 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -103,6 +115,9 @@ fun Sidebar(vm: MainViewModel) {
             NavItem(painterResource(R.drawable.ic_all_comics), "All comics", section == Section.AllComics, width, labels) {
                 vm.show(Section.AllComics)
             }
+            NavItem(painterResource(R.drawable.ic_will_read), "Will Read", section == Section.WillRead, width, labels) {
+                vm.show(Section.WillRead)
+            }
             NavItem(painterResource(R.drawable.ic_ungrouped), "Ungrouped", section == Section.Ungrouped, width, labels) {
                 vm.show(Section.Ungrouped)
             }
@@ -123,13 +138,7 @@ fun Sidebar(vm: MainViewModel) {
                     Icon(Icons.Filled.Add, contentDescription = "New group", tint = HarbourColors.Muted)
                 }
             }
-            LazyColumn(Modifier.weight(1f)) {
-                items(vm.sortedGroups, key = { it.id }) { g ->
-                    GroupNavItem(vm, g, section == Section.InGroup(g.id), width, labels) {
-                        vm.show(Section.InGroup(g.id))
-                    }
-                }
-            }
+            ReorderableGroups(vm, section, width, labels, Modifier.weight(1f))
 
             NavItem(painterResource(R.drawable.ic_book), "Books", section == Section.Books, width, labels) {
                 vm.show(Section.Books)
@@ -181,6 +190,77 @@ private fun NavItem(
     }
 }
 
+/**
+ * The group list. Press and hold a group, then drag it up or down to move it; the new order is
+ * saved when you let go.
+ */
+@Composable
+private fun ReorderableGroups(vm: MainViewModel, section: Section, width: Dp, labels: Float, modifier: Modifier) {
+    var order by remember { mutableStateOf(vm.orderedGroups) }
+    var dragging by remember { mutableStateOf<String?>(null) }
+    var offset by remember { mutableFloatStateOf(0f) }
+    val haptics = LocalHapticFeedback.current
+    val rowPx = with(LocalDensity.current) { 54.dp.toPx() } // 50dp row + 2dp padding above and below
+
+    // Follow changes from elsewhere (new, renamed or deleted groups) except mid-drag.
+    LaunchedEffect(vm.orderedGroups) {
+        if (dragging == null) order = vm.orderedGroups
+    }
+
+    fun finish() {
+        if (dragging != null) vm.reorderGroups(order.map { it.id })
+        dragging = null
+        offset = 0f
+    }
+
+    LazyColumn(modifier) {
+        items(order, key = { it.id }) { g ->
+            val isDragging = g.id == dragging
+            GroupNavItem(
+                vm = vm,
+                group = g,
+                selected = section == Section.InGroup(g.id),
+                panelWidth = width,
+                labelAlpha = labels,
+                modifier = Modifier
+                    // Same modifiers throughout the drag (so the gesture isn't restarted); only the
+                    // dragged row skips the slide animation, since it follows your finger instead.
+                    .zIndex(if (isDragging) 1f else 0f)
+                    .animateItem(placementSpec = if (isDragging) null else spring<IntOffset>(stiffness = Spring.StiffnessMediumLow))
+                    .graphicsLayer {
+                        translationY = if (isDragging) offset else 0f
+                        shadowElevation = if (isDragging) 12f else 0f
+                    }
+                    .pointerInput(g.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                dragging = g.id
+                                offset = 0f
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                offset += amount.y
+                                val i = order.indexOfFirst { it.id == dragging }
+                                if (i >= 0 && offset > rowPx / 2 && i < order.lastIndex) {
+                                    order = order.toMutableList().apply { add(i + 1, removeAt(i)) }
+                                    offset -= rowPx
+                                } else if (i > 0 && offset < -rowPx / 2) {
+                                    order = order.toMutableList().apply { add(i - 1, removeAt(i)) }
+                                    offset += rowPx
+                                }
+                            },
+                            onDragEnd = { finish() },
+                            onDragCancel = { finish() },
+                        )
+                    },
+            ) {
+                vm.show(Section.InGroup(g.id))
+            }
+        }
+    }
+}
+
 @Composable
 private fun GroupNavItem(
     vm: MainViewModel,
@@ -188,12 +268,13 @@ private fun GroupNavItem(
     selected: Boolean,
     panelWidth: Dp,
     labelAlpha: Float,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val comics = remember(group, vm.comics) { vm.comicsIn(group) }
     val first = remember(group, vm.comics) { vm.coverOf(group) }
     val count = comics.size
-    NavRow(selected, panelWidth, onClick) {
+    NavRow(selected, panelWidth, onClick, modifier) {
         if (first != null) {
             CoverImage(first, Modifier.size(width = 24.dp, height = 34.dp), corner = 4.dp)
         } else {
@@ -225,10 +306,16 @@ private fun GroupNavItem(
 
 /** One row of the panel. Its highlight shrinks with the panel so it stays a neat pill. */
 @Composable
-private fun NavRow(selected: Boolean, panelWidth: Dp, onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun NavRow(
+    selected: Boolean,
+    panelWidth: Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .padding(horizontal = 12.dp, vertical = 2.dp)
             .width(panelWidth - 24.dp)
             .height(50.dp)

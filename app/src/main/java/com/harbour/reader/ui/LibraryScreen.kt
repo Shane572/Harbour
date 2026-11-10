@@ -93,6 +93,15 @@ fun MainScreen(vm: MainViewModel) {
                     Section.Home -> HomeSection(vm)
                     Section.AllComics -> ComicsSection(vm, "All comics", vm.comics, group = null)
                     Section.Ungrouped -> ComicsSection(vm, "Ungrouped", vm.ungrouped, group = null)
+                    Section.WillRead -> ComicsSection(
+                        vm = vm,
+                        title = "Will Read",
+                        comics = vm.willRead,
+                        group = null,
+                        presorted = true,
+                        emptyHint = "Nothing lined up yet" to
+                            "Long-press comics anywhere (All comics, a group, or search) and tap Add to Will Read.",
+                    )
                     is Section.InGroup -> {
                         val group = vm.groupById(section.id)
                         if (group == null) {
@@ -131,11 +140,11 @@ fun CoverSize.minCell(): Dp = when (this) {
 
 @Composable
 private fun HomeSection(vm: MainViewModel) {
-    // Just three groups: the ones you last read from, topped up A–Z. All groups are in the sidebar.
+    // Just three groups: the ones you last read from, topped up in your order. All groups are in the sidebar.
     val recent = vm.recentGroups
-    val groups = remember(vm.sortedGroups, recent) {
+    val groups = remember(vm.orderedGroups, recent) {
         val ids = recent.map { it.id }.toSet()
-        (recent + vm.sortedGroups.filter { it.id !in ids }).take(3)
+        (recent + vm.orderedGroups.filter { it.id !in ids }).take(3)
     }
     val continueReading = vm.continueReading
 

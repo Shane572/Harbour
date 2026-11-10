@@ -39,6 +39,7 @@ sealed interface Section {
     data object Home : Section
     data object AllComics : Section
     data object Ungrouped : Section
+    data object WillRead : Section
     data class InGroup(val id: String) : Section
     data object Books : Section
     data object Settings : Section
@@ -49,6 +50,7 @@ val Section.stateKey: String
         Section.Home -> "home"
         Section.AllComics -> "all"
         Section.Ungrouped -> "ungrouped"
+        Section.WillRead -> "will-read"
         is Section.InGroup -> "group:$id"
         Section.Books -> "books"
         Section.Settings -> "settings"
@@ -98,7 +100,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         buildMap { groups.forEach { g -> g.keys.forEach { put(it, g) } } }
     }
 
-    val sortedGroups: List<Group> by derivedStateOf { groups.sortedWith(compareBy(NaturalOrder) { it.name }) }
+    /** Groups in Shane's own order (drag to reorder in the sidebar). New groups go at the end. */
+    val orderedGroups: List<Group> get() = groups
 
     val ungrouped: List<Comic> by derivedStateOf { comics.filter { it.key !in groupOfKey } }
 
@@ -238,6 +241,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     init {
+        // Groups used to be listed A–Z; keep that look the first time, then the order is Shane's.
+        if (!settings.getBoolean("groupsOrdered", false)) {
+            groups = groups.sortedWith(compareBy(NaturalOrder) { it.name })
+            groupStore.save(groups)
+            settings.edit().putBoolean("groupsOrdered", true).apply()
+        }
         if (roots.isNotEmpty()) rescan()
         checkForUpdate(quiet = true)
     }
@@ -390,6 +399,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         message = "Cover set for ${g.name}"
     }
 
+    /** Saves a new group order from the sidebar. */
+    fun reorderGroups(ids: List<String>) {
+        val byId = groups.associateBy { it.id }
+        groups = ids.mapNotNull { byId[it] } + groups.filter { it.id !in ids }
+        groupStore.save(groups)
+    }
+
     private fun updateGroup(id: String, change: (Group) -> Group) {
         groups = groups.map { if (it.id == id) change(it) else it }
         groupStore.save(groups)
@@ -418,6 +434,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val id = groupOfKey[c.key]?.id ?: return
         recentGroupIds = (listOf(id) + recentGroupIds.filter { it != id }).take(6)
         settings.edit().putString("recentGroups", recentGroupIds.joinToString(",")).apply()
+    }
+
+    // Will Read: comics lined up to read next, in the order they were added
+
+    private var willReadKeys by mutableStateOf(
+        settings.getString("willRead", null)?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
+    )
+
+    val willRead: List<Comic> by derivedStateOf { willReadKeys.mapNotNull { comicsByKey[it] } }
+
+    fun isWillRead(key: String): Boolean = key in willReadKeys
+
+    fun addToWillRead(keys: Collection<String>) {
+        val adding = keys.filter { it !in willReadKeys }
+            .sortedWith(compareBy(NaturalOrder) { comicsByKey[it]?.name ?: it })
+        saveWillRead(willReadKeys + adding)
+        message = if (adding.size == 1) "Added to Will Read" else "Added ${adding.size} to Will Read"
+    }
+
+    fun removeFromWillRead(keys: Collection<String>) {
+        val leaving = keys.toSet()
+        saveWillRead(willReadKeys.filterNot { it in leaving })
+    }
+
+    private fun saveWillRead(keys: List<String>) {
+        willReadKeys = keys
+        settings.edit().putString("willRead", keys.joinToString("\n")).apply()
     }
 
     // Search
@@ -477,6 +520,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             comics = comics.filterNot { it.key in keys }
             books = books.filterNot { it.key in keys }
             removeFromGroups(keys)
+            removeFromWillRead(keys)
             keys.forEach {
                 progress.remove(it)
                 progressStore.clear(it)
