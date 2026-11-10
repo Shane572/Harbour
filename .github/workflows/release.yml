@@ -1,0 +1,35 @@
+name: Release a build
+
+# Promotes a preview build so the tablet's Update button offers it.
+# Run it from the Actions tab: pick "Release a build", then "Run workflow".
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Build number to release (leave empty for the newest build)
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark the build as released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          if [ -z "$BUILD" ]; then
+            TAG=$(gh release list -R "$GITHUB_REPOSITORY" --limit 1 --json tagName -q '.[0].tagName')
+          else
+            TAG="build-$BUILD"
+          fi
+          echo "Releasing $TAG"
+          gh release edit "$TAG" -R "$GITHUB_REPOSITORY" \
+            --prerelease=false --latest \
+            --title "Harbour build ${TAG#build-}" \
+            --notes "Released to the tablet. For a first install, download Harbour.apk below and open it on your tablet."

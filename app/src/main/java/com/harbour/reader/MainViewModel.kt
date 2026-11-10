@@ -61,6 +61,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val currentBuild: Int get() = updater.currentBuild
     var update by mutableStateOf<UpdateState>(UpdateState.Idle)
         private set
+    var previewBuilds by mutableStateOf(settings.getBoolean("previewBuilds", false))
+        private set
+
+    fun setPreviewBuilds(on: Boolean) {
+        previewBuilds = on
+        settings.edit().putBoolean("previewBuilds", on).apply()
+        update = UpdateState.Idle
+        checkForUpdate()
+    }
 
     init {
         if (roots.isNotEmpty()) rescan()
@@ -75,7 +84,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             update = UpdateState.Checking
             update = try {
-                updater.check()?.let { UpdateState.Available(it) } ?: UpdateState.UpToDate
+                updater.check(includePreviews = previewBuilds)?.let { UpdateState.Available(it) } ?: UpdateState.UpToDate
             } catch (e: Exception) {
                 if (quiet) UpdateState.Idle else UpdateState.Failed("Couldn't check for updates", null)
             }

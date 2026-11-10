@@ -11,12 +11,13 @@ import androidx.core.content.IntentCompat
 import androidx.core.content.pm.PackageInfoCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class UpdateInfo(val build: Int, val apkUrl: String, val sizeBytes: Long)
+data class UpdateInfo(val build: Int, val apkUrl: String, val sizeBytes: Long, val preview: Boolean)
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -41,24 +42,43 @@ class Updater(private val context: Context) {
         ).toInt()
     }.getOrDefault(0)
 
-    /** Returns the newer release, or null when this is already the latest. */
-    suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
-        val conn = URL(LATEST_RELEASE_API).openConnection() as HttpURLConnection
+    /**
+     * Returns the newest build above this one, or null when up to date.
+     * Normally only released builds count; with [includePreviews] (the PC emulator copy) every
+     * new build counts, so it can be tried before it reaches the tablet.
+     */
+    suspend fun check(includePreviews: Boolean): UpdateInfo? = withContext(Dispatchers.IO) {
+        val releases: List<JSONObject> = if (includePreviews) {
+            val arr = JSONArray(get("$API/releases?per_page=15"))
+            (0 until arr.length()).map { arr.getJSONObject(it) }
+        } else {
+            listOf(JSONObject(get("$API/releases/latest")))
+        }
+        releases
+            .filter { !it.optBoolean("draft") }
+            .mapNotNull(::toUpdate)
+            .filter { it.build > currentBuild }
+            .maxByOrNull { it.build }
+    }
+
+    private fun toUpdate(release: JSONObject): UpdateInfo? {
+        val build = release.optString("tag_name").removePrefix("build-").toIntOrNull() ?: return null
+        val assets = release.optJSONArray("assets") ?: return null
+        val apk = (0 until assets.length())
+            .map { assets.getJSONObject(it) }
+            .firstOrNull { it.optString("name").endsWith(".apk") }
+            ?: return null
+        return UpdateInfo(build, apk.getString("browser_download_url"), apk.optLong("size"), release.optBoolean("prerelease"))
+    }
+
+    private fun get(url: String): String {
+        val conn = URL(url).openConnection() as HttpURLConnection
         conn.setRequestProperty("Accept", "application/vnd.github+json")
         conn.connectTimeout = 10_000
         conn.readTimeout = 15_000
         try {
             if (conn.responseCode != 200) throw IOException("GitHub replied ${conn.responseCode}")
-            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            val build = json.optString("tag_name").removePrefix("build-").toIntOrNull()
-                ?: return@withContext null
-            val assets = json.optJSONArray("assets") ?: return@withContext null
-            val apk = (0 until assets.length())
-                .map { assets.getJSONObject(it) }
-                .firstOrNull { it.optString("name").endsWith(".apk") }
-                ?: return@withContext null
-            if (build <= currentBuild) null
-            else UpdateInfo(build, apk.getString("browser_download_url"), apk.optLong("size"))
+            return conn.inputStream.bufferedReader().use { it.readText() }
         } finally {
             conn.disconnect()
         }
@@ -112,7 +132,7 @@ class Updater(private val context: Context) {
     }
 
     companion object {
-        private const val LATEST_RELEASE_API = "https://api.github.com/repos/Shane572/Harbour/releases/latest"
+        private const val API = "https://api.github.com/repos/Shane572/Harbour"
     }
 }
 

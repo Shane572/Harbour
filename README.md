@@ -24,7 +24,7 @@ Every push to `main` builds the app on GitHub and publishes it as a release.
 3. If Android asks, allow your browser to install apps ("Install unknown apps").
 4. Open Harbour and choose your comics folder.
 
-After that, Harbour updates itself: when a newer build exists, the library shows
+After that, Harbour updates itself: when a newer build is released, the library shows
 **Update available**, and one tap downloads and installs it over the top, keeping your folders
 and reading progress. You can also check by hand under the settings (gear) button.
 
@@ -32,3 +32,11 @@ and reading progress. You can also check by hand under the settings (gear) butto
 
 Open the project in Android Studio, or run `./gradlew assembleDebug` with the Android SDK
 installed. The APK lands in `app/build/outputs/apk/debug/`.
+
+## Previewing changes on the PC first
+
+Every push builds a **preview**. The tablet ignores previews; only a copy of Harbour with
+**Preview builds** switched on (in settings) sees them, which is how the PC emulator copy is set up.
+
+When a preview looks right, release it: on GitHub open **Actions → Release a build → Run workflow**
+(leave the number empty for the newest build). The tablet then shows **Update available**.

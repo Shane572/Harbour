@@ -29,13 +29,14 @@ jobs:
       - name: Name the APK
         run: cp app/build/outputs/apk/debug/app-debug.apk Harbour.apk
 
-      # Each build becomes a GitHub Release, so the newest APK is always one tap away at
-      # https://github.com/<owner>/<repo>/releases/latest
-      - name: Publish release
+      # Each build is published as a preview. Only the PC emulator copy (with "Preview builds"
+      # switched on) sees it. The "Release a build" workflow promotes it so the tablet updates.
+      - name: Publish preview
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Harbour build ${{ github.run_number }}
-          body: Harbour updates itself from here. For a first install, download Harbour.apk below and open it on your tablet.
+          name: Harbour build ${{ github.run_number }} (preview)
+          body: Preview build. Run the "Release a build" workflow to send it to the tablet.
           files: Harbour.apk
-          make_latest: true
+          prerelease: true
+          make_latest: false
