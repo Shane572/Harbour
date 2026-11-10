@@ -26,6 +26,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
+import com.harbour.reader.R
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import kotlin.math.roundToInt
@@ -96,6 +102,33 @@ fun CoverImage(comic: LibraryItem?, modifier: Modifier = Modifier, corner: Dp = 
                 color = HarbourColors.Muted.copy(alpha = 0.5f),
             )
         }
+    }
+}
+
+/** Marks a finished comic or book: a small book with a tick, on a dark chip so it never looks selected. */
+@Composable
+fun ReadBadge(modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.65f)),
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_read),
+            contentDescription = "Read",
+            tint = HarbourColors.Accent,
+            modifier = Modifier.size(22.dp),
+        )
+        Icon(
+            Icons.Filled.Check,
+            contentDescription = null,
+            tint = HarbourColors.OnAccent,
+            modifier = Modifier
+                .padding(start = 2.dp)
+                .size(13.dp),
+        )
     }
 }
 

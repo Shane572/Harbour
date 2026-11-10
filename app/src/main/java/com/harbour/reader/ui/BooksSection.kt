@@ -201,6 +201,7 @@ fun BookCard(vm: MainViewModel, book: Book) {
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color.Black.copy(alpha = 0.45f)),
                 )
+                ReadBadge(Modifier.align(Alignment.TopEnd).padding(8.dp))
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Mark as read") }, onClick = {
@@ -217,9 +218,9 @@ fun BookCard(vm: MainViewModel, book: Book) {
                 })
             }
         }
-        if (progress != null && !progress.finished) {
+        if (progress != null) {
             Spacer(Modifier.height(6.dp))
-            CoverProgress(progress.overall)
+            CoverProgress(if (progress.finished) 1f else progress.overall)
         }
         Spacer(Modifier.height(8.dp))
         Text(

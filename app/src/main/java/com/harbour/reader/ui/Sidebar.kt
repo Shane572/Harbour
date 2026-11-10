@@ -191,7 +191,7 @@ private fun GroupNavItem(
     onClick: () -> Unit,
 ) {
     val comics = remember(group, vm.comics) { vm.comicsIn(group) }
-    val first = comics.firstOrNull()
+    val first = remember(group, vm.comics) { vm.coverOf(group) }
     val count = comics.size
     NavRow(selected, panelWidth, onClick) {
         if (first != null) {

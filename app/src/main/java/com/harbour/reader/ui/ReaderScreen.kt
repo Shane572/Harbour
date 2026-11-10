@@ -202,9 +202,21 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
     }
     BackHandler(enabled = showOptions) { showOptions = false }
 
+    // A finished comic stays at 100% while you flick back through it, until you reset it.
+    var keepFinished by remember(comic.key) {
+        mutableStateOf(if (book != null) vm.bookProgress[book.key]?.finished == true else vm.progress[comic.key]?.finished == true)
+    }
+
     fun onPageShown(p: Int) {
         page = p
+        if (keepFinished) return
         if (book != null) vm.savePdfProgress(book, p, count) else vm.saveProgress(comic, p, count)
+    }
+
+    fun resetProgress() {
+        if (book != null) vm.setBookRead(listOf(book.key), false) else vm.setRead(listOf(comic.key), false)
+        keepFinished = false
+        onPageShown(page)
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -329,6 +341,8 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
                 },
                 onLayout = vm::changePageLayout,
                 onFitWidth = vm::changeFitWidth,
+                finished = keepFinished,
+                onReset = ::resetProgress,
             )
         }
     }
@@ -462,6 +476,8 @@ private fun ReadingOptions(
     onMode: (ReadingMode) -> Unit,
     onLayout: (PageLayout) -> Unit,
     onFitWidth: (Boolean) -> Unit,
+    finished: Boolean,
+    onReset: () -> Unit,
 ) {
     Column(
         modifier
@@ -494,6 +510,20 @@ private fun ReadingOptions(
                 Choice("Fit width", fitWidth) { onFitWidth(true) }
             }
         }
+        if (finished) ResetRow(onReset)
+    }
+}
+
+/** Shown in reader options for something already finished: it stays at 100% until reset here. */
+@Composable
+fun ResetRow(onReset: () -> Unit) {
+    Spacer(Modifier.height(16.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Finished", style = MaterialTheme.typography.titleSmall, color = HarbourColors.Text)
+            Text("Stays at 100% until you reset it", style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted)
+        }
+        TextButton(onClick = onReset) { Text("Reset progress", color = HarbourColors.Accent) }
     }
 }
 

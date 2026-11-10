@@ -380,6 +380,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The comic shown as a group's picture: the one picked with Set as group cover, else the first issue. */
+    fun coverOf(g: Group): Comic? =
+        g.coverKey?.takeIf { it in g.keys }?.let { comicsByKey[it] } ?: comicsIn(g).firstOrNull()
+
+    fun setGroupCover(key: String) {
+        val g = groupOfKey[key] ?: return
+        updateGroup(g.id) { it.copy(coverKey = key) }
+        message = "Cover set for ${g.name}"
+    }
+
     private fun updateGroup(id: String, change: (Group) -> Group) {
         groups = groups.map { if (it.id == id) change(it) else it }
         groupStore.save(groups)

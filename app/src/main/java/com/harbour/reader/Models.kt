@@ -84,7 +84,14 @@ data class BookStyle(
  * A collection Shane makes himself. Groups have nothing to do with folders on disk.
  * [readOrder] is an optional hand-picked reading sequence (comic keys, all of them in [keys]).
  */
-data class Group(val id: String, val name: String, val keys: List<String>, val readOrder: List<String> = emptyList())
+data class Group(
+    val id: String,
+    val name: String,
+    val keys: List<String>,
+    val readOrder: List<String> = emptyList(),
+    /** The comic whose cover stands for the group; null means its first issue. */
+    val coverKey: String? = null,
+)
 
 data class Progress(val page: Int, val total: Int, val time: Long) {
     val finished: Boolean get() = total > 0 && page >= total - 1

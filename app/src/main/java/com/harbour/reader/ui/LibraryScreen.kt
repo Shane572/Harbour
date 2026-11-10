@@ -193,7 +193,7 @@ private fun HomeSection(vm: MainViewModel) {
 
         items(groups, key = { it.id }) { g ->
             val comics = remember(g, vm.comics) { vm.comicsIn(g) }
-            GroupCard(g, comics, readCount = comics.count { vm.progress[it.key]?.finished == true }) {
+            GroupCard(g, comics, cover = vm.coverOf(g), readCount = comics.count { vm.progress[it.key]?.finished == true }) {
                 vm.show(Section.InGroup(g.id))
             }
         }
@@ -301,7 +301,7 @@ private fun ContinueCard(comic: Comic, subtitle: String, progress: Progress?, on
 
 /** A group shown as a little stack of covers. */
 @Composable
-private fun GroupCard(group: Group, comics: List<Comic>, readCount: Int, onClick: () -> Unit) {
+private fun GroupCard(group: Group, comics: List<Comic>, cover: Comic?, readCount: Int, onClick: () -> Unit) {
     Column(
         Modifier
             .clip(RoundedCornerShape(12.dp))
@@ -322,7 +322,7 @@ private fun GroupCard(group: Group, comics: List<Comic>, readCount: Int, onClick
                 )
             }
             CoverImage(
-                comics.firstOrNull(),
+                cover,
                 Modifier
                     .fillMaxSize()
                     .padding(top = if (comics.size > 1) 7.dp else 0.dp),

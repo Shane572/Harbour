@@ -21,6 +21,7 @@ class GroupStore(context: Context) {
                 name = o.getString("name"),
                 keys = (0 until keys.length()).map { keys.getString(it) },
                 readOrder = order?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
+                coverKey = o.optString("cover").ifEmpty { null },
             )
         }
     }.getOrDefault(emptyList())
@@ -30,7 +31,8 @@ class GroupStore(context: Context) {
         groups.forEach { g ->
             arr.put(
                 JSONObject().put("id", g.id).put("name", g.name)
-                    .put("keys", JSONArray(g.keys)).put("order", JSONArray(g.readOrder)),
+                    .put("keys", JSONArray(g.keys)).put("order", JSONArray(g.readOrder))
+                    .put("cover", g.coverKey),
             )
         }
         // Write then rename, so a crash mid-write can't wipe the groups.

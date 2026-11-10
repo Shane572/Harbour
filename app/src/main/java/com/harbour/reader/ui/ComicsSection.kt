@@ -117,6 +117,13 @@ fun ComicsSection(
                 add("Move later in read order" to { vm.moveInReadOrder(group.id, only, 1) })
             }
         }
+        val single = selected.singleOrNull()
+        if (single != null && single in vm.groupOfKey) {
+            add("Set as group cover" to {
+                vm.setGroupCover(single)
+                done()
+            })
+        }
         if (selected.any { it in vm.groupOfKey }) {
             add("Remove from group" to {
                 vm.removeFromGroups(selected)
@@ -488,7 +495,9 @@ private fun ComicCard(
                         .background(Color.Black.copy(alpha = if (selected) 0.25f else 0.45f)),
                 )
             }
-            if (selecting || progress?.finished == true) {
+            if (!selecting && progress?.finished == true) {
+                ReadBadge(Modifier.align(Alignment.TopEnd).padding(8.dp))
+            } else if (selecting) {
                 Box(
                     Modifier
                         .align(Alignment.TopEnd)
@@ -534,9 +543,9 @@ private fun ComicCard(
                 }
             }
         }
-        if (progress != null && !progress.finished) {
+        if (progress != null) {
             Spacer(Modifier.height(6.dp))
-            CoverProgress(progress.fraction)
+            CoverProgress(if (progress.finished) 1f else progress.fraction)
         }
         Spacer(Modifier.height(8.dp))
         Text(

@@ -298,8 +298,12 @@ private class WebHolder {
 private fun BookReaderContent(vm: MainViewModel, book: Book, epub: EpubBook) {
     val chapters = epub.spine.size
     val saved = remember(book.key) { vm.bookProgress[book.key] }
-    var chapter by remember(book.key) { mutableIntStateOf((saved?.chapter ?: 0).coerceIn(0, chapters - 1)) }
-    var start by remember(book.key) { mutableStateOf((saved?.fraction ?: 0f).toString()) }
+    // A finished book opens at the start and stays at 100% until you reset it.
+    var keepFinished by remember(book.key) { mutableStateOf(saved?.finished == true) }
+    var chapter by remember(book.key) {
+        mutableIntStateOf(if (keepFinished) 0 else (saved?.chapter ?: 0).coerceIn(0, chapters - 1))
+    }
+    var start by remember(book.key) { mutableStateOf(if (keepFinished) "0" else (saved?.fraction ?: 0f).toString()) }
     var nonce by remember(book.key) { mutableIntStateOf(0) }
     var page by remember { mutableIntStateOf(0) }
     var pages by remember { mutableIntStateOf(1) }
@@ -318,7 +322,7 @@ private fun BookReaderContent(vm: MainViewModel, book: Book, epub: EpubBook) {
         pages = count
         page = p
         val fraction = if (count <= 1) 1f else p.toFloat() / (count - 1)
-        vm.saveBookProgress(book, chapter, fraction, chapters)
+        if (!keepFinished) vm.saveBookProgress(book, chapter, fraction, chapters)
     }
 
     fun goToChapter(ch: Int, from: String) {
@@ -447,6 +451,12 @@ private fun BookReaderContent(vm: MainViewModel, book: Book, epub: EpubBook) {
                     .padding(top = 64.dp, end = 16.dp),
                 style = style,
                 onChange = vm::changeBookStyle,
+                finished = keepFinished,
+                onReset = {
+                    vm.setBookRead(listOf(book.key), false)
+                    keepFinished = false
+                    vm.saveBookProgress(book, chapter, if (pages <= 1) 1f else page.toFloat() / (pages - 1), chapters)
+                },
             )
         }
         if (showUi && panel == "contents") {
@@ -548,7 +558,7 @@ private fun BookBottomBar(
 }
 
 @Composable
-private fun StylePanel(modifier: Modifier, style: BookStyle, onChange: (BookStyle) -> Unit) {
+private fun StylePanel(modifier: Modifier, style: BookStyle, onChange: (BookStyle) -> Unit, finished: Boolean, onReset: () -> Unit) {
     Column(
         modifier
             .width(400.dp)
@@ -612,6 +622,7 @@ private fun StylePanel(modifier: Modifier, style: BookStyle, onChange: (BookStyl
                 }
             }
         }
+        if (finished) ResetRow(onReset)
     }
 }
 
