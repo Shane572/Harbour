@@ -97,7 +97,7 @@ class LibraryRepository(private val context: Context) {
             if (f.name.startsWith(".")) continue
             if (f.isDirectory) {
                 walk(f, "$path/${f.name}", out)
-            } else if (f.name.endsWith(".cbz", ignoreCase = true)) {
+            } else if (ComicArchive.isComicFile(f.name)) {
                 out += Comic(
                     uri = Uri.fromFile(f).toString(),
                     name = f.name,

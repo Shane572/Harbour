@@ -1,5 +1,6 @@
 package com.harbour.reader.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
@@ -8,19 +9,26 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,10 +39,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,15 +65,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Brush
@@ -70,6 +90,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,6 +100,8 @@ import androidx.compose.ui.unit.dp
 import com.harbour.reader.Comic
 import com.harbour.reader.ComicArchive
 import com.harbour.reader.MainViewModel
+import com.harbour.reader.PageLayout
+import com.harbour.reader.ReadingMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -91,6 +114,7 @@ import kotlin.math.roundToInt
 /**
  * Pages are decoded at full size up to this many pixels (~48 MB each, three in memory at once).
  * Standard digital pages (1988x3056, about 6 MP) stay sharp; only huge scans get halved.
+ * Two-page spreads use half this per page, since each page gets half the screen.
  */
 private const val PAGE_PIXELS = 12_000_000L
 
@@ -98,13 +122,14 @@ private enum class TapZone { Left, Center, Right }
 
 @Composable
 fun ReaderScreen(vm: MainViewModel, comic: Comic) {
+    val context = LocalContext.current
     var archive by remember(comic.key) { mutableStateOf<ComicArchive?>(null) }
     var error by remember(comic.key) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(comic.key) {
         var opened: ComicArchive? = null
         try {
-            opened = withContext(Dispatchers.IO) { ComicArchive.open(comic.file) }
+            opened = withContext(Dispatchers.IO) { ComicArchive.open(comic.file, context.cacheDir) }
             if (opened.pageCount == 0) {
                 error = "No pages found in this file."
             } else {
@@ -129,200 +154,439 @@ fun ReaderScreen(vm: MainViewModel, comic: Comic) {
         val a = archive
         when {
             error != null -> ReaderError(error ?: "", onBack = vm::back)
-            a == null -> CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center).size(32.dp),
-                color = HarbourColors.Accent,
-                strokeWidth = 2.dp,
-            )
+            a == null -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(Modifier.size(32.dp), color = HarbourColors.Accent, strokeWidth = 2.dp)
+                if (comic.name.endsWith(".cbr", ignoreCase = true)) {
+                    Spacer(Modifier.height(14.dp))
+                    Text("Unpacking…", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelLarge)
+                }
+            }
             else -> ReaderContent(vm, comic, a)
         }
     }
 }
 
+/** Groups pages into what's shown at once: one page, or the cover alone then pairs. */
+private fun buildSpreads(count: Int, double: Boolean): List<IntArray> =
+    if (!double) {
+        List(count) { intArrayOf(it) }
+    } else {
+        buildList {
+            add(intArrayOf(0))
+            var i = 1
+            while (i < count) {
+                add(if (i + 1 < count) intArrayOf(i, i + 1) else intArrayOf(i))
+                i += 2
+            }
+        }
+    }
+
 @Composable
 private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive) {
     val count = archive.pageCount
-    val pager = rememberPagerState(initialPage = vm.startPage(comic, count)) { count }
     val scope = rememberCoroutineScope()
-    var rtl by remember(comic.key) { mutableStateOf(vm.isRtl(comic)) }
+    var mode by remember(comic.key) { mutableStateOf(vm.readingMode(comic)) }
+    var page by remember(comic.key) { mutableIntStateOf(vm.startPage(comic, count)) }
     var showUi by remember { mutableStateOf(true) }
+    var showOptions by remember { mutableStateOf(false) }
     var zoomed by remember { mutableStateOf(false) }
     val next = remember(comic.key) { vm.nextComic(comic) }
 
-    LaunchedEffect(pager.settledPage) { vm.saveProgress(comic, pager.settledPage, count) }
     LaunchedEffect(Unit) {
         delay(2200)
-        showUi = false
+        if (!showOptions) showUi = false
+    }
+    BackHandler(enabled = showOptions) { showOptions = false }
+
+    fun onPageShown(p: Int) {
+        page = p
+        vm.saveProgress(comic, p, count)
     }
 
-    fun turn(forward: Boolean) {
-        val target = pager.currentPage + if (forward) 1 else -1
-        when {
-            target in 0 until count -> scope.launch { pager.animateScrollToPage(target) }
-            forward -> showUi = true // at the end: show controls (and the next-issue button)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val landscape = maxWidth > maxHeight
+        val double = mode != ReadingMode.Vertical &&
+            (vm.pageLayout == PageLayout.Double || (vm.pageLayout == PageLayout.Auto && landscape))
+        val spreads = remember(count, double) { buildSpreads(count, double) }
+        fun spreadOf(p: Int): Int = spreads.indexOfFirst { p in it }.coerceAtLeast(0)
+
+        // Recreated when the layout changes, starting from the page you were on.
+        val pager: PagerState = key(spreads) { rememberPagerState(initialPage = spreadOf(page)) { spreads.size } }
+        val list: LazyListState = key(mode) { rememberLazyListState(initialFirstVisibleItemIndex = page) }
+        val atEnd = if (mode == ReadingMode.Vertical) {
+            !list.canScrollForward && list.layoutInfo.totalItemsCount > 0
+        } else {
+            pager.currentPage == spreads.lastIndex
         }
-    }
 
-    Box(Modifier.fillMaxSize()) {
-        HorizontalPager(
-            state = pager,
-            modifier = Modifier.fillMaxSize(),
-            reverseLayout = rtl,
-            userScrollEnabled = !zoomed,
-            beyondViewportPageCount = 1,
-            key = { it },
-        ) { index ->
-            ZoomablePage(
+        if (mode == ReadingMode.Vertical) {
+            LaunchedEffect(list, count) {
+                snapshotFlow { if (!list.canScrollForward) count - 1 else list.firstVisibleItemIndex.coerceAtMost(count - 1) }
+                    .collect { onPageShown(it) }
+            }
+            VerticalReader(
                 archive = archive,
-                index = index,
-                isCurrent = index == pager.currentPage,
-                onZoomChange = { zoomed = it },
+                state = list,
+                next = next,
+                onNext = { n -> vm.switchToComic(n) },
                 onTap = { zone ->
                     when (zone) {
-                        TapZone.Left -> turn(forward = rtl)
-                        TapZone.Right -> turn(forward = !rtl)
                         TapZone.Center -> showUi = !showUi
+                        TapZone.Left -> scope.launch { list.animateScrollBy(-constraints.maxHeight * 0.8f) }
+                        TapZone.Right -> scope.launch { list.animateScrollBy(constraints.maxHeight * 0.8f) }
                     }
                 },
             )
-        }
+        } else {
+            val rtl = mode == ReadingMode.RightToLeft
+            LaunchedEffect(pager, spreads) {
+                snapshotFlow { pager.settledPage }.collect { i ->
+                    val s = spreads[i.coerceIn(0, spreads.lastIndex)]
+                    onPageShown(if (s.last() == count - 1) count - 1 else s.first())
+                }
+            }
 
-        // Top bar
-        AnimatedVisibility(
-            visible = showUi,
-            enter = fadeIn(tween(180)),
-            exit = fadeOut(tween(180)),
-            modifier = Modifier.align(Alignment.TopCenter),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.88f), Color.Transparent)))
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                    .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 28.dp),
-            ) {
-                IconButton(onClick = vm::back) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+            fun turn(forward: Boolean) {
+                val target = pager.currentPage + if (forward) 1 else -1
+                when {
+                    target in spreads.indices -> scope.launch { pager.animateScrollToPage(target) }
+                    forward -> showUi = true // at the end: show controls (and the next-issue button)
                 }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        comic.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        vm.subtitleFor(comic),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                TextButton(onClick = {
-                    rtl = !rtl
-                    vm.setRtl(comic, rtl)
-                }) {
-                    Text(
-                        if (rtl) "Right to left" else "Left to right",
-                        color = HarbourColors.Accent,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
+            }
+
+            HorizontalPager(
+                state = pager,
+                modifier = Modifier.fillMaxSize(),
+                reverseLayout = rtl,
+                userScrollEnabled = !zoomed,
+                beyondViewportPageCount = 1,
+                key = { it },
+            ) { index ->
+                ZoomableSpread(
+                    archive = archive,
+                    pages = spreads[index],
+                    rtl = rtl,
+                    fitWidth = vm.fitWidth && spreads[index].size == 1,
+                    isCurrent = index == pager.currentPage,
+                    onZoomChange = { zoomed = it },
+                    onTap = { zone ->
+                        when (zone) {
+                            TapZone.Left -> turn(forward = rtl)
+                            TapZone.Right -> turn(forward = !rtl)
+                            TapZone.Center -> showUi = !showUi
+                        }
+                    },
+                )
             }
         }
 
-        // Bottom bar
-        AnimatedVisibility(
+        TopBar(
             visible = showUi,
-            enter = fadeIn(tween(180)),
-            exit = fadeOut(tween(180)),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            var sliderValue by remember { mutableStateOf<Float?>(null) }
-            val shown = sliderValue ?: pager.currentPage.toFloat()
+            comic = comic,
+            subtitle = vm.subtitleFor(comic),
+            onBack = vm::back,
+            onOptions = { showOptions = !showOptions },
+        )
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+        BottomBar(
+            visible = showUi,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            page = page,
+            spreadLabel = if (mode == ReadingMode.Vertical) {
+                null
+            } else {
+                spreads[pager.currentPage.coerceIn(0, spreads.lastIndex)]
+                    .takeIf { it.size == 2 }
+                    ?.let { "${it[0] + 1}–${it[1] + 1}" }
+            },
+            count = count,
+            rtl = mode == ReadingMode.RightToLeft,
+            next = if (atEnd && mode != ReadingMode.Vertical) next else null,
+            onNext = { n -> vm.switchToComic(n) },
+            onSeek = { target ->
+                scope.launch {
+                    if (mode == ReadingMode.Vertical) list.scrollToItem(target) else pager.scrollToPage(spreadOf(target))
+                }
+            },
+        )
+
+        if (showOptions && showUi) {
+            ReadingOptions(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                    .padding(start = 24.dp, end = 24.dp, top = 36.dp, bottom = 16.dp),
-            ) {
-                if (next != null && pager.currentPage == count - 1) {
-                    Button(
-                        onClick = { vm.switchToComic(next) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = HarbourColors.Accent,
-                            contentColor = HarbourColors.OnAccent,
-                        ),
-                        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
-                        modifier = Modifier.widthIn(max = 420.dp),
-                    ) {
-                        Text("Next: ${next.title}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    Spacer(Modifier.height(14.dp))
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.widthIn(max = 760.dp),
-                ) {
-                    Text(
-                        "${shown.roundToInt() + 1}",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.width(36.dp),
-                    )
-                    CompositionLocalProvider(
-                        LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
-                    ) {
-                        Slider(
-                            value = shown,
-                            onValueChange = { sliderValue = it },
-                            onValueChangeFinished = {
-                                sliderValue?.let { v -> scope.launch { pager.scrollToPage(v.roundToInt()) } }
-                                sliderValue = null
-                            },
-                            valueRange = 0f..(count - 1).coerceAtLeast(1).toFloat(),
-                            enabled = count > 1,
-                            colors = SliderDefaults.colors(
-                                thumbColor = HarbourColors.Accent,
-                                activeTrackColor = HarbourColors.Accent,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.18f),
-                            ),
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Text(
-                        "$count",
-                        color = Color.White.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.width(36.dp),
-                    )
-                }
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.End))
+                    .padding(top = 64.dp, end = 16.dp),
+                mode = mode,
+                layout = vm.pageLayout,
+                fitWidth = vm.fitWidth,
+                onMode = {
+                    mode = it
+                    vm.setReadingMode(comic, it)
+                },
+                onLayout = vm::changePageLayout,
+                onFitWidth = vm::changeFitWidth,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopBar(visible: Boolean, comic: Comic, subtitle: String, onBack: () -> Unit, onOptions: () -> Unit) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(180)), exit = fadeOut(tween(180))) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.88f), Color.Transparent)))
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 28.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    comic.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onOptions) {
+                Icon(Icons.Filled.Settings, contentDescription = "Reading options", tint = Color.White)
             }
         }
     }
 }
 
 @Composable
-private fun ZoomablePage(
+private fun BottomBar(
+    visible: Boolean,
+    modifier: Modifier,
+    page: Int,
+    spreadLabel: String?,
+    count: Int,
+    rtl: Boolean,
+    next: Comic?,
+    onNext: (Comic) -> Unit,
+    onSeek: (Int) -> Unit,
+) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(180)), exit = fadeOut(tween(180)), modifier = modifier) {
+        var sliderValue by remember { mutableStateOf<Float?>(null) }
+        val shown = sliderValue ?: page.toFloat()
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                .padding(start = 24.dp, end = 24.dp, top = 36.dp, bottom = 16.dp),
+        ) {
+            if (next != null) {
+                NextButton(next, onNext)
+                Spacer(Modifier.height(14.dp))
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.widthIn(max = 760.dp),
+            ) {
+                val p = shown.roundToInt()
+                Text(
+                    if (sliderValue == null && spreadLabel != null) spreadLabel else "${p + 1}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.width(56.dp),
+                )
+                CompositionLocalProvider(LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
+                    Slider(
+                        value = shown,
+                        onValueChange = { sliderValue = it },
+                        onValueChangeFinished = {
+                            sliderValue?.let { onSeek(it.roundToInt()) }
+                            sliderValue = null
+                        },
+                        valueRange = 0f..(count - 1).coerceAtLeast(1).toFloat(),
+                        enabled = count > 1,
+                        colors = SliderDefaults.colors(
+                            thumbColor = HarbourColors.Accent,
+                            activeTrackColor = HarbourColors.Accent,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.18f),
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Text(
+                    "$count",
+                    color = Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.width(36.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NextButton(next: Comic, onNext: (Comic) -> Unit) {
+    Button(
+        onClick = { onNext(next) },
+        colors = ButtonDefaults.buttonColors(containerColor = HarbourColors.Accent, contentColor = HarbourColors.OnAccent),
+        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
+        modifier = Modifier.widthIn(max = 420.dp),
+    ) {
+        Text("Next: ${next.title}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun ReadingOptions(
+    modifier: Modifier,
+    mode: ReadingMode,
+    layout: PageLayout,
+    fitWidth: Boolean,
+    onMode: (ReadingMode) -> Unit,
+    onLayout: (PageLayout) -> Unit,
+    onFitWidth: (Boolean) -> Unit,
+) {
+    Column(
+        modifier
+            .width(380.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(HarbourColors.Surface)
+            // Swallow taps so they don't reach the page underneath.
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+            .padding(20.dp),
+    ) {
+        Text("Reading options", style = MaterialTheme.typography.titleMedium, color = HarbourColors.Text)
+        Spacer(Modifier.height(14.dp))
+        OptionLabel("Direction", "Remembered for this group")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Choice("Left to right", mode == ReadingMode.LeftToRight) { onMode(ReadingMode.LeftToRight) }
+            Choice("Right to left", mode == ReadingMode.RightToLeft) { onMode(ReadingMode.RightToLeft) }
+        }
+        Choice("Vertical scroll (webtoons)", mode == ReadingMode.Vertical) { onMode(ReadingMode.Vertical) }
+
+        if (mode != ReadingMode.Vertical) {
+            Spacer(Modifier.height(14.dp))
+            OptionLabel("Pages", "Auto shows two pages side by side in landscape")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PageLayout.entries.forEach { l -> Choice(l.label, layout == l) { onLayout(l) } }
+            }
+            Spacer(Modifier.height(14.dp))
+            OptionLabel("Fit", "Fit width lets you scroll down tall pages")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Choice("Whole page", !fitWidth) { onFitWidth(false) }
+                Choice("Fit width", fitWidth) { onFitWidth(true) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptionLabel(title: String, detail: String) {
+    Text(title, style = MaterialTheme.typography.titleSmall, color = HarbourColors.Text)
+    Text(detail, style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted)
+    Spacer(Modifier.height(6.dp))
+}
+
+/** One page's image, decoded in the background. */
+@Composable
+private fun rememberPage(archive: ComicArchive, index: Int, maxPixels: Long): ImageBitmap? {
+    val bitmap by produceState<ImageBitmap?>(null, archive, index, maxPixels) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { archive.decodePage(index, maxPixels)?.asImageBitmap() }.getOrNull()
+        }
+    }
+    return bitmap
+}
+
+@Composable
+private fun PageSpinner(modifier: Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(26.dp),
+            color = Color.White.copy(alpha = 0.35f),
+            strokeWidth = 2.dp,
+        )
+    }
+}
+
+/** Webtoon-style: every page stacked, fit to width, scrolled continuously. */
+@Composable
+private fun VerticalReader(
     archive: ComicArchive,
-    index: Int,
+    state: LazyListState,
+    next: Comic?,
+    onNext: (Comic) -> Unit,
+    onTap: (TapZone) -> Unit,
+) {
+    val currentOnTap by rememberUpdatedState(onTap)
+    var width by remember { mutableIntStateOf(0) }
+    LazyColumn(
+        state = state,
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { width = it.width }
+            .pointerInput(Unit) {
+                detectTapGestures { p ->
+                    currentOnTap(
+                        when {
+                            p.x < width * 0.3f -> TapZone.Left
+                            p.x > width * 0.7f -> TapZone.Right
+                            else -> TapZone.Center
+                        },
+                    )
+                }
+            },
+    ) {
+        items(archive.pageCount, key = { it }) { index ->
+            val bmp = rememberPage(archive, index, PAGE_PIXELS)
+            if (bmp == null) {
+                PageSpinner(Modifier.fillMaxWidth().aspectRatio(0.66f))
+            } else {
+                Image(
+                    bitmap = bmp,
+                    contentDescription = "Page ${index + 1}",
+                    contentScale = ContentScale.FillWidth,
+                    filterQuality = FilterQuality.High,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1)),
+                )
+            }
+        }
+        if (next != null) {
+            item(key = "next") {
+                Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                    NextButton(next, onNext)
+                }
+            }
+        }
+    }
+}
+
+/** One or two pages side by side, with pinch and double-tap zoom over the whole spread. */
+@Composable
+private fun ZoomableSpread(
+    archive: ComicArchive,
+    pages: IntArray,
+    rtl: Boolean,
+    fitWidth: Boolean,
     isCurrent: Boolean,
     onZoomChange: (Boolean) -> Unit,
     onTap: (TapZone) -> Unit,
 ) {
-    val bitmap by produceState<ImageBitmap?>(null, archive, index) {
-        value = withContext(Dispatchers.IO) {
-            runCatching { archive.decodePage(index, PAGE_PIXELS)?.asImageBitmap() }.getOrNull()
-        }
-    }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
@@ -388,7 +652,7 @@ private fun ZoomablePage(
                         }
 
                         // Pinch always zooms; one-finger drags only pan when zoomed in,
-                        // otherwise they fall through to the pager for page swipes.
+                        // otherwise they fall through to the pager (or fit-width scrolling).
                         if (pressed > 1 || scale > 1.01f) {
                             val zoom = event.calculateZoom()
                             val pan = event.calculatePan()
@@ -441,29 +705,70 @@ private fun ZoomablePage(
                 }
             },
     ) {
-        val bmp = bitmap
-        if (bmp == null) {
-            CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center).size(26.dp),
-                color = Color.White.copy(alpha = 0.35f),
-                strokeWidth = 2.dp,
-            )
-        } else {
-            Image(
-                bitmap = bmp,
-                contentDescription = "Page ${index + 1}",
-                contentScale = ContentScale.Fit,
-                filterQuality = FilterQuality.High,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = offset.x
-                        translationY = offset.y
-                    },
-            )
+        val layer = Modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            translationX = offset.x
+            translationY = offset.y
         }
+        when {
+            pages.size == 2 -> {
+                // Left page hugs the spine on its right, and vice versa. Manga reads right page first.
+                val (left, right) = if (rtl) pages[1] to pages[0] else pages[0] to pages[1]
+                Row(Modifier.fillMaxSize().then(layer)) {
+                    SpreadPage(archive, left, Alignment.CenterEnd, Modifier.weight(1f).fillMaxHeight())
+                    SpreadPage(archive, right, Alignment.CenterStart, Modifier.weight(1f).fillMaxHeight())
+                }
+            }
+            fitWidth -> {
+                val bmp = rememberPage(archive, pages[0], PAGE_PIXELS)
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .then(layer),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    if (bmp == null) {
+                        PageSpinner(Modifier.fillMaxWidth().aspectRatio(0.66f))
+                    } else {
+                        Image(
+                            bitmap = bmp,
+                            contentDescription = "Page ${pages[0] + 1}",
+                            contentScale = ContentScale.FillWidth,
+                            filterQuality = FilterQuality.High,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1)),
+                        )
+                    }
+                }
+            }
+            else -> SpreadPage(archive, pages[0], Alignment.Center, Modifier.fillMaxSize().then(layer), PAGE_PIXELS)
+        }
+    }
+}
+
+@Composable
+private fun SpreadPage(
+    archive: ComicArchive,
+    index: Int,
+    alignment: Alignment,
+    modifier: Modifier,
+    maxPixels: Long = PAGE_PIXELS / 2,
+) {
+    val bmp = rememberPage(archive, index, maxPixels)
+    if (bmp == null) {
+        PageSpinner(modifier)
+    } else {
+        Image(
+            bitmap = bmp,
+            contentDescription = "Page ${index + 1}",
+            contentScale = ContentScale.Fit,
+            alignment = alignment,
+            filterQuality = FilterQuality.High,
+            modifier = modifier,
+        )
     }
 }
 

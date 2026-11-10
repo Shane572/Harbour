@@ -60,7 +60,7 @@ object StorageAccess {
         val folders = children
             .filter { it.isDirectory && !it.name.startsWith(".") }
             .sortedWith(compareBy(NaturalOrder) { it.name })
-        val comics = children.count { it.isFile && it.name.endsWith(".cbz", ignoreCase = true) }
+        val comics = children.count { it.isFile && ComicArchive.isComicFile(it.name) }
         return Listing(folders, comics, readable = true)
     }
 }

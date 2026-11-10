@@ -47,15 +47,12 @@ class CoverCache(context: Context) {
     }
 
     private fun generate(c: Comic, out: File): Boolean = runCatching {
-        ComicArchive.open(c.file).use { archive ->
-            if (archive.pageCount == 0) return@runCatching false
-            val page = archive.decodePage(0, 900L * 1400L) ?: return@runCatching false
-            val w = 360
-            val h = (w * page.height.toFloat() / page.width).toInt().coerceIn(1, 1080)
-            val thumb = Bitmap.createScaledBitmap(page, w, h, true)
-            val tmp = File(out.path + ".tmp")
-            tmp.outputStream().use { thumb.compress(Bitmap.CompressFormat.JPEG, 85, it) }
-            tmp.renameTo(out)
-        }
+        val page = ComicArchive.coverPage(c.file, 900L * 1400L) ?: return@runCatching false
+        val w = 360
+        val h = (w * page.height.toFloat() / page.width).toInt().coerceIn(1, 1080)
+        val thumb = Bitmap.createScaledBitmap(page, w, h, true)
+        val tmp = File(out.path + ".tmp")
+        tmp.outputStream().use { thumb.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        tmp.renameTo(out)
     }.getOrDefault(false)
 }

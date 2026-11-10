@@ -16,6 +16,8 @@ android {
         val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = buildNumber
         versionName = "1.0.$buildNumber"
+        // Only ARM tablets and phones; keeps the RAR library's native code from bloating the APK.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     // A fixed key so every GitHub build installs as an update over the last one
@@ -63,4 +65,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // libarchive, for CBR (RAR and RAR5) comics
+    implementation("me.zhanghai.android.libarchive:library:1.1.4")
 }

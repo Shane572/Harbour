@@ -320,14 +320,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Reading direction, remembered per group (or per comic until it's grouped)
+    // Reading options. Direction is remembered per group (or per comic until it's grouped);
+    // page layout and fit apply everywhere.
 
-    private fun rtlKey(c: Comic): String = groupOfKey[c.key]?.let { "rtl:g:${it.id}" } ?: "rtl:c:${c.key}"
+    private fun modeKey(c: Comic): String = groupOfKey[c.key]?.let { "mode:g:${it.id}" } ?: "mode:c:${c.key}"
 
-    fun isRtl(c: Comic): Boolean = settings.getBoolean(rtlKey(c), false)
+    fun readingMode(c: Comic): ReadingMode = enumValueOr(settings.getString(modeKey(c), null), ReadingMode.LeftToRight)
 
-    fun setRtl(c: Comic, rtl: Boolean) {
-        settings.edit().putBoolean(rtlKey(c), rtl).apply()
+    fun setReadingMode(c: Comic, mode: ReadingMode) {
+        settings.edit().putString(modeKey(c), mode.name).apply()
+    }
+
+    var pageLayout by mutableStateOf(enumValueOr(settings.getString("pageLayout", null), PageLayout.Auto))
+        private set
+    var fitWidth by mutableStateOf(settings.getBoolean("fitWidth", false))
+        private set
+
+    fun changePageLayout(l: PageLayout) {
+        pageLayout = l
+        settings.edit().putString("pageLayout", l.name).apply()
+    }
+
+    fun changeFitWidth(on: Boolean) {
+        fitWidth = on
+        settings.edit().putBoolean("fitWidth", on).apply()
     }
 }
 
