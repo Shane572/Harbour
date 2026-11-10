@@ -33,10 +33,8 @@ and reading progress. You can also check by hand under the settings (gear) butto
 Open the project in Android Studio, or run `./gradlew assembleDebug` with the Android SDK
 installed. The APK lands in `app/build/outputs/apk/debug/`.
 
-## Previewing changes on the PC first
+## Releases
 
-Every push builds a **preview**. The tablet ignores previews; only a copy of Harbour with
-**Preview builds** switched on (in settings) sees them, which is how the PC emulator copy is set up.
-
-When a preview looks right, release it: on GitHub open **Actions → Release a build → Run workflow**
-(leave the number empty for the newest build). The tablet then shows **Update available**.
+Every push to `main` is released straight away, so the tablet offers it next time Harbour opens.
+The **Preview builds** switch in settings is left over from testing on an emulator; it does no harm.
+The **Release a build** workflow can still promote an older preview build if one exists.
