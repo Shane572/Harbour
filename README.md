@@ -19,7 +19,7 @@ does the rest.
 
 Every push to `main` builds the app on GitHub and publishes it as a release.
 
-1. On the tablet, open `https://github.com/<owner>/<repo>/releases/latest`.
+1. On the tablet, open `https://github.com/Shane572/Harbour/releases/latest`.
 2. Tap **Harbour.apk** to download it, then open it.
 3. If Android asks, allow your browser to install apps ("Install unknown apps").
 4. Open Harbour and choose your comics folder.
