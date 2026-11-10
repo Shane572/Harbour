@@ -11,13 +11,12 @@ import androidx.core.content.IntentCompat
 import androidx.core.content.pm.PackageInfoCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class UpdateInfo(val build: Int, val apkUrl: String, val sizeBytes: Long, val preview: Boolean)
+data class UpdateInfo(val build: Int, val apkUrl: String, val sizeBytes: Long)
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -42,23 +41,9 @@ class Updater(private val context: Context) {
         ).toInt()
     }.getOrDefault(0)
 
-    /**
-     * Returns the newest build above this one, or null when up to date.
-     * Normally only released builds count; with [includePreviews] (the PC emulator copy) every
-     * new build counts, so it can be tried before it reaches the tablet.
-     */
-    suspend fun check(includePreviews: Boolean): UpdateInfo? = withContext(Dispatchers.IO) {
-        val releases: List<JSONObject> = if (includePreviews) {
-            val arr = JSONArray(get("$API/releases?per_page=15"))
-            (0 until arr.length()).map { arr.getJSONObject(it) }
-        } else {
-            listOf(JSONObject(get("$API/releases/latest")))
-        }
-        releases
-            .filter { !it.optBoolean("draft") }
-            .mapNotNull(::toUpdate)
-            .filter { it.build > currentBuild }
-            .maxByOrNull { it.build }
+    /** Returns the latest release if it's newer than this build, or null when up to date. */
+    suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
+        toUpdate(JSONObject(get("$API/releases/latest")))?.takeIf { it.build > currentBuild }
     }
 
     private fun toUpdate(release: JSONObject): UpdateInfo? {
@@ -68,7 +53,7 @@ class Updater(private val context: Context) {
             .map { assets.getJSONObject(it) }
             .firstOrNull { it.optString("name").endsWith(".apk") }
             ?: return null
-        return UpdateInfo(build, apk.getString("browser_download_url"), apk.optLong("size"), release.optBoolean("prerelease"))
+        return UpdateInfo(build, apk.getString("browser_download_url"), apk.optLong("size"))
     }
 
     private fun get(url: String): String {

@@ -3,7 +3,6 @@ package com.harbour.reader
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -16,7 +15,7 @@ import java.io.File
 import java.util.Collections
 
 /** Makes a small cover thumbnail from each comic's first page, cached on disk and in memory. */
-class CoverCache(private val context: Context) {
+class CoverCache(context: Context) {
     private val dir = File(context.cacheDir, "covers").apply { mkdirs() }
     private val memory = object : LruCache<String, ImageBitmap>(40 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ImageBitmap): Int = value.asAndroidBitmap().byteCount
@@ -48,7 +47,7 @@ class CoverCache(private val context: Context) {
     }
 
     private fun generate(c: Comic, out: File): Boolean = runCatching {
-        ComicArchive.open(context, Uri.parse(c.uri)).use { archive ->
+        ComicArchive.open(c.file).use { archive ->
             if (archive.pageCount == 0) return@runCatching false
             val page = archive.decodePage(0, 900L * 1400L) ?: return@runCatching false
             val w = 360

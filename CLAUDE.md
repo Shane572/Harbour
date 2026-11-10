@@ -2,7 +2,8 @@
 
 Shane's personal comic reader for his Android tablet (Honor Pad 8, MagicUI / Android 12).
 Kotlin + Jetpack Compose, single activity, no Android Studio needed: GitHub Actions builds
-the APK on every push to `main` and publishes it as a GitHub Release (`build-N`, versionCode N).
+the release APK on every push to `main` and publishes it as a GitHub Release (`build-N`,
+versionCode N). Release, not debug: debug Compose builds are noticeably slower on the tablet.
 
 ## How Shane gets updates
 
@@ -25,7 +26,10 @@ the APK on every push to `main` and publishes it as a GitHub Release (`build-N`,
 - Do **not** use Android's system folder picker (`OpenDocumentTree` / SAF). It is broken on this
   tablet. Folder choosing is Harbour's own browser (`ui/FolderBrowserScreen.kt`) using
   All files access (`MANAGE_EXTERNAL_STORAGE`, see `StorageAccess.kt`). Library roots are
-  `file://` URIs. (`LibraryRepository` still has SAF scanning code from early builds; unused.)
+  `file://` URIs; comics are opened straight from the file.
+- Compile locally before pushing when you can: `./gradlew assembleRelease` with `JAVA_HOME`
+  set to a JDK 17 and `ANDROID_HOME` set to `%LOCALAPPDATA%\Android\Sdk`. Android Studio's
+  bundled JDK on Shane's PC is 25, which Gradle 8.11 can't run on.
 - Crashes are written to `filesDir/last_crash.txt` by `HarbourApp.kt` and shown on next launch
   with a Copy button. Ask Shane to paste that when something breaks.
 - Only touch this repository. Shane also has a company GitHub org (Kinore-Engineering); never
@@ -40,11 +44,10 @@ the APK on every push to `main` and publishes it as a GitHub Release (`build-N`,
 - `CoverCache.kt`, `ProgressStore.kt`, `Updater.kt`, `StorageAccess.kt`, `HarbourApp.kt`
 - `ui/` — `LibraryScreen`, `SeriesScreen`, `ReaderScreen`, `FolderBrowserScreen`, `UpdateUi`, theme
 
-## Current state (build 9)
+## Current state (build 10)
 
 Works: library of `.cbz` comics by folder/series with covers, continue reading, reader with
 swipe/tap/zoom/page slider, right-to-left per series, next issue, mark read, in-app updates.
 
 Not yet: EPUB books, CBR, double-page spreads, webtoon scroll, theming. Shane wants to work on
-features and customisation next. The "Preview builds" switch in settings is left over from an
-emulator experiment and can be removed.
+features and customisation next.

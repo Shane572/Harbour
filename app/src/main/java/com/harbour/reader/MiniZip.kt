@@ -16,11 +16,9 @@ class ZipEntryInfo(
 )
 
 /**
- * A small random-access ZIP reader that works straight off a FileChannel.
- *
- * Android's folder access gives us file descriptors, not file paths, and java.util.zip.ZipFile
- * needs a path. Reading the central directory ourselves lets us jump to any page instantly
- * without copying the whole comic first.
+ * A small random-access ZIP reader that works straight off a FileChannel: it reads the central
+ * directory once, then jumps to any page. Unlike java.util.zip.ZipFile it never rejects a comic
+ * over oddly encoded file names, and it is tested against stored, deflated, zip64 and macOS zips.
  */
 object MiniZip {
     private const val EOCD_SIG = 0x06054b50

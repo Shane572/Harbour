@@ -56,7 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Harbour's own folder picker, for tablets where Android's folder picker doesn't work. */
+/** Harbour's own folder picker. Android's system picker is broken on Shane's tablet, so it isn't used. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FolderBrowserScreen(vm: MainViewModel) {
@@ -152,7 +152,7 @@ fun FolderBrowserScreen(vm: MainViewModel) {
                         )
                         Spacer(Modifier.width(16.dp))
                         Button(
-                            onClick = { vm.addFileRoot(current) },
+                            onClick = { vm.addRoot(current) },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = HarbourColors.Accent,
                                 contentColor = HarbourColors.OnAccent,

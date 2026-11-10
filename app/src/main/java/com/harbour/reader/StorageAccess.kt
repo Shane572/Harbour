@@ -12,8 +12,8 @@ import androidx.core.content.ContextCompat
 import java.io.File
 
 /**
- * Plain file access for Harbour's own folder browser, used when the system folder picker is
- * missing or broken (some tablets, e.g. Amazon Fire, don't ship it).
+ * Plain file access for Harbour's folder browser and library. Android's system folder picker
+ * is broken on Shane's tablet, so Harbour uses All files access instead.
  */
 object StorageAccess {
 

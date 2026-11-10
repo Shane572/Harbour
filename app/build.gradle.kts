@@ -29,6 +29,7 @@ android {
         }
     }
 
+    // GitHub ships the release build: not debuggable, so Compose runs at full speed.
     buildTypes {
         release {
             isMinifyEnabled = false

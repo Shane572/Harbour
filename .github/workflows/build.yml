@@ -24,10 +24,11 @@ jobs:
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
+      # Release builds run much faster than debug ones; both use the same committed key.
       - name: Name the APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Harbour.apk
+        run: cp app/build/outputs/apk/release/app-release.apk Harbour.apk
 
       # Each build is released straight away, so the tablet's Update button offers it.
       - name: Publish release

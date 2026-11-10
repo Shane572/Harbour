@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.harbour.reader.Comic
 import com.harbour.reader.MainViewModel
+import com.harbour.reader.Progress
 import com.harbour.reader.Series
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -187,7 +188,7 @@ private fun LibraryGrid(vm: MainViewModel, onOpenFolders: () -> Unit) {
                     Spacer(Modifier.height(14.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         items(continueReading, key = { it.key }) { comic ->
-                            ContinueCard(comic, vm.progress[comic.key]?.let { it.page to it.total }) {
+                            ContinueCard(comic, vm.progress[comic.key]) {
                                 vm.openComic(comic)
                             }
                         }
@@ -264,7 +265,7 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun ContinueCard(comic: Comic, pages: Pair<Int, Int>?, onClick: () -> Unit) {
+private fun ContinueCard(comic: Comic, progress: Progress?, onClick: () -> Unit) {
     Row(
         Modifier
             .width(320.dp)
@@ -293,12 +294,11 @@ private fun ContinueCard(comic: Comic, pages: Pair<Int, Int>?, onClick: () -> Un
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.weight(1f))
-            if (pages != null) {
-                val (page, total) = pages
-                ProgressLine(if (total <= 1) 0f else page.toFloat() / (total - 1))
+            if (progress != null) {
+                ProgressLine(progress.fraction)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Page ${page + 1} of $total",
+                    "Page ${progress.page + 1} of ${progress.total}",
                     style = MaterialTheme.typography.labelSmall,
                     color = HarbourColors.Muted,
                 )

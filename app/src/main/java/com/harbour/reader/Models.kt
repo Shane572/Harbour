@@ -1,5 +1,8 @@
 package com.harbour.reader
 
+import android.net.Uri
+import java.io.File
+
 data class Comic(
     val uri: String,
     val name: String,
@@ -10,7 +13,9 @@ data class Comic(
 ) {
     val title: String get() = name.substringBeforeLast('.')
 
-    /** Stable id that survives re-adding the same folder (tree URIs can change). */
+    val file: File get() = File(Uri.parse(uri).path ?: "")
+
+    /** Stable id for progress and settings, independent of where the folder lives. */
     val key: String get() = "$seriesPath/$name"
 }
 

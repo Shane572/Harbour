@@ -2,7 +2,6 @@ package com.harbour.reader
 
 import android.app.Application
 import android.content.Context
-import android.net.Uri
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -12,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import java.io.File
 
 sealed interface Screen {
     data object Library : Screen
@@ -72,16 +72,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val currentBuild: Int get() = updater.currentBuild
     var update by mutableStateOf<UpdateState>(UpdateState.Idle)
         private set
-    var previewBuilds by mutableStateOf(settings.getBoolean("previewBuilds", false))
-        private set
-
-    fun changePreviewBuilds(on: Boolean) {
-        previewBuilds = on
-        settings.edit().putBoolean("previewBuilds", on).apply()
-        update = UpdateState.Idle
-        checkForUpdate()
-    }
-
     init {
         if (roots.isNotEmpty()) rescan()
         checkForUpdate(quiet = true)
@@ -95,7 +85,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             update = UpdateState.Checking
             update = try {
-                updater.check(includePreviews = previewBuilds)?.let { UpdateState.Available(it) } ?: UpdateState.UpToDate
+                updater.check()?.let { UpdateState.Available(it) } ?: UpdateState.UpToDate
             } catch (e: Exception) {
                 if (quiet) UpdateState.Idle else UpdateState.Failed("Couldn't check for updates", null)
             }
@@ -117,21 +107,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // Folders
 
-    fun addRoot(uri: Uri) {
-        try {
-            roots = repo.addRoot(uri)
-            rescan()
-        } catch (e: Exception) {
-            message = "Couldn't get access to that folder"
-        }
-    }
-
     fun openBrowser() {
         if (screen !is Screen.Browse) backStack.add(Screen.Browse)
     }
 
-    fun addFileRoot(dir: java.io.File) {
-        roots = repo.addFileRoot(dir)
+    fun addRoot(dir: File) {
+        roots = repo.addRoot(dir)
         backStack.removeAll { it is Screen.Browse }
         rescan()
     }

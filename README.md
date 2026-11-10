@@ -30,11 +30,9 @@ and reading progress. You can also check by hand under the settings (gear) butto
 
 ## Building it yourself
 
-Open the project in Android Studio, or run `./gradlew assembleDebug` with the Android SDK
-installed. The APK lands in `app/build/outputs/apk/debug/`.
+Open the project in Android Studio, or run `./gradlew assembleRelease` with JDK 17 and the
+Android SDK installed. The APK lands in `app/build/outputs/apk/release/`.
 
 ## Releases
 
 Every push to `main` is released straight away, so the tablet offers it next time Harbour opens.
-The **Preview builds** switch in settings is left over from testing on an emulator; it does no harm.
-The **Release a build** workflow can still promote an older preview build if one exists.

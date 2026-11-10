@@ -1,21 +1,18 @@
 package com.harbour.reader
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.net.Uri
 import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
-import java.io.IOException
 import java.nio.channels.FileChannel
 
 /** An open CBZ: its page list in reading order, and page decoding on demand. */
 class ComicArchive private constructor(
-    private val channel: FileChannel,
-    private val resources: List<Closeable>,
+    private val stream: FileInputStream,
     private val pages: List<ZipEntryInfo>,
 ) : Closeable {
+    private val channel: FileChannel = stream.channel
 
     val pageCount: Int get() = pages.size
 
@@ -35,7 +32,7 @@ class ComicArchive private constructor(
     }
 
     override fun close() {
-        resources.forEach { runCatching { it.close() } }
+        runCatching { stream.close() }
     }
 
     companion object {
@@ -51,36 +48,12 @@ class ComicArchive private constructor(
             }
             .sortedWith(compareBy(NaturalOrder) { it.name })
 
-        fun open(context: Context, uri: Uri): ComicArchive {
-            // Fast path: read the zip in place through the file descriptor.
-            val pfd = context.contentResolver.openFileDescriptor(uri, "r")
-                ?: throw IOException("Can't open file")
-            val stream = FileInputStream(pfd.fileDescriptor)
+        fun open(file: File): ComicArchive {
+            val stream = FileInputStream(file)
             try {
-                val ch = stream.channel
-                val entries = MiniZip.readEntries(ch)
-                return ComicArchive(ch, listOf(stream, pfd), pagesOf(entries))
+                return ComicArchive(stream, pagesOf(MiniZip.readEntries(stream.channel)))
             } catch (e: Exception) {
-                runCatching { stream.close() }
-                runCatching { pfd.close() }
-            }
-
-            // Slow path (e.g. cloud-backed files that aren't seekable): copy to cache first.
-            val tmp = File.createTempFile("open", ".cbz", context.cacheDir)
-            try {
-                val input = context.contentResolver.openInputStream(uri) ?: throw IOException("Can't open file")
-                input.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
-                val fs = FileInputStream(tmp)
-                try {
-                    val ch = fs.channel
-                    val entries = MiniZip.readEntries(ch)
-                    return ComicArchive(ch, listOf(fs, Closeable { tmp.delete() }), pagesOf(entries))
-                } catch (e: Exception) {
-                    fs.close()
-                    throw e
-                }
-            } catch (e: Exception) {
-                tmp.delete()
+                stream.close()
                 throw e
             }
         }

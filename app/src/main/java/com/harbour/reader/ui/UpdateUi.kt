@@ -14,8 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,7 +47,7 @@ fun UpdateBanner(vm: MainViewModel) {
             Column(Modifier.weight(1f)) {
                 when (state) {
                     is UpdateState.Available -> {
-                        BannerTitle(if (state.info.preview) "Preview build available" else "Update available")
+                        BannerTitle("Update available")
                         BannerDetail("Build ${state.info.build}${sizeText(state.info)} · you have build ${vm.currentBuild}")
                     }
                     is UpdateState.Downloading -> {
@@ -125,26 +123,6 @@ fun UpdateSettingsRow(vm: MainViewModel) {
                 Text("Check now", color = HarbourColors.Accent)
             }
         }
-    }
-    Spacer(Modifier.height(12.dp))
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f)) {
-            Text("Preview builds", style = MaterialTheme.typography.titleSmall, color = HarbourColors.Text)
-            Text(
-                "Get every new build before it's released. For testing on the PC; leave off on the tablet.",
-                style = MaterialTheme.typography.labelSmall,
-                color = HarbourColors.Muted,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(
-            checked = vm.previewBuilds,
-            onCheckedChange = { vm.changePreviewBuilds(it) },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = HarbourColors.OnAccent,
-                checkedTrackColor = HarbourColors.Accent,
-            ),
-        )
     }
 }
 

@@ -1,6 +1,5 @@
 package com.harbour.reader.ui
 
-import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
@@ -71,7 +70,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,21 +88,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-/** Pages are decoded to at most this many pixels (~24 MB each) so a few can sit in memory at once. */
-private const val PAGE_PIXELS = 6_000_000L
+/**
+ * Pages are decoded at full size up to this many pixels (~48 MB each, three in memory at once).
+ * Standard digital pages (1988x3056, about 6 MP) stay sharp; only huge scans get halved.
+ */
+private const val PAGE_PIXELS = 12_000_000L
 
 private enum class TapZone { Left, Center, Right }
 
 @Composable
 fun ReaderScreen(vm: MainViewModel, comic: Comic) {
-    val context = LocalContext.current
     var archive by remember(comic.key) { mutableStateOf<ComicArchive?>(null) }
     var error by remember(comic.key) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(comic.key) {
         var opened: ComicArchive? = null
         try {
-            opened = withContext(Dispatchers.IO) { ComicArchive.open(context, Uri.parse(comic.uri)) }
+            opened = withContext(Dispatchers.IO) { ComicArchive.open(comic.file) }
             if (opened.pageCount == 0) {
                 error = "No pages found in this file."
             } else {
