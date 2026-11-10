@@ -99,6 +99,10 @@ private const val SCRIPT_PATH = "__harbour.js"
 
 @Composable
 fun BookReaderScreen(vm: MainViewModel, book: Book) {
+    if (book.isPdf) {
+        ReaderScreen(vm, book.asComic(), book)
+        return
+    }
     var epub by remember(book.key) { mutableStateOf<EpubBook?>(null) }
     var error by remember(book.key) { mutableStateOf<String?>(null) }
 

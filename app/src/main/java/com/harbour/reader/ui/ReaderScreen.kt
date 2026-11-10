@@ -97,6 +97,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.harbour.reader.Book
 import com.harbour.reader.Comic
 import com.harbour.reader.ComicArchive
 import com.harbour.reader.MainViewModel
@@ -120,8 +121,9 @@ private const val PAGE_PIXELS = 12_000_000L
 
 private enum class TapZone { Left, Center, Right }
 
+/** Reads a comic, or a PDF [book] (passed as [comic] via Book.asComic, with progress kept as a book). */
 @Composable
-fun ReaderScreen(vm: MainViewModel, comic: Comic) {
+fun ReaderScreen(vm: MainViewModel, comic: Comic, book: Book? = null) {
     val context = LocalContext.current
     var archive by remember(comic.key) { mutableStateOf<ComicArchive?>(null) }
     var error by remember(comic.key) { mutableStateOf<String?>(null) }
@@ -139,7 +141,7 @@ fun ReaderScreen(vm: MainViewModel, comic: Comic) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = "Couldn't open this comic. ${e.message ?: ""}".trim()
+            error = "Couldn't open this file. ${e.message ?: ""}".trim()
         } finally {
             archive = null
             opened?.close()
@@ -161,7 +163,7 @@ fun ReaderScreen(vm: MainViewModel, comic: Comic) {
                     Text("Unpacking…", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelLarge)
                 }
             }
-            else -> ReaderContent(vm, comic, a)
+            else -> ReaderContent(vm, comic, a, book)
         }
     }
 }
@@ -182,15 +184,17 @@ private fun buildSpreads(count: Int, double: Boolean): List<IntArray> =
     }
 
 @Composable
-private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive) {
+private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive, book: Book?) {
     val count = archive.pageCount
     val scope = rememberCoroutineScope()
     var mode by remember(comic.key) { mutableStateOf(vm.readingMode(comic)) }
-    var page by remember(comic.key) { mutableIntStateOf(vm.startPage(comic, count)) }
+    var page by remember(comic.key) {
+        mutableIntStateOf(if (book != null) vm.pdfStartPage(book, count) else vm.startPage(comic, count))
+    }
     var showUi by remember { mutableStateOf(true) }
     var showOptions by remember { mutableStateOf(false) }
     var zoomed by remember { mutableStateOf(false) }
-    val next = remember(comic.key) { vm.nextComic(comic) }
+    val next = remember(comic.key) { if (book != null) null else vm.nextComic(comic) }
 
     LaunchedEffect(Unit) {
         delay(2200)
@@ -200,7 +204,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
 
     fun onPageShown(p: Int) {
         page = p
-        vm.saveProgress(comic, p, count)
+        if (book != null) vm.savePdfProgress(book, p, count) else vm.saveProgress(comic, p, count)
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -283,7 +287,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
         TopBar(
             visible = showUi,
             comic = comic,
-            subtitle = vm.subtitleFor(comic),
+            subtitle = if (book != null) book.author else vm.subtitleFor(comic),
             onBack = vm::back,
             onOptions = { showOptions = !showOptions },
         )

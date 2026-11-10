@@ -2,6 +2,8 @@ package com.harbour.reader
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import me.zhanghai.android.libarchive.Archive
 import me.zhanghai.android.libarchive.ArchiveEntry
@@ -10,15 +12,17 @@ import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
+import kotlin.math.sqrt
 
-/** An open comic (CBZ or CBR): its pages in reading order, decoded on demand. */
+/** Pages in reading order, decoded on demand: a CBZ or CBR comic, or a PDF book. */
 abstract class ComicArchive : Closeable {
     abstract val pageCount: Int
 
-    protected abstract fun pageBytes(index: Int): ByteArray
+    /** The page's image file. Archives of images provide this; PDFs draw pages instead. */
+    protected open fun pageBytes(index: Int): ByteArray = throw UnsupportedOperationException()
 
     /** Decodes a page, downsampled so it stays under [maxPixels] to keep memory sane. */
-    fun decodePage(index: Int, maxPixels: Long, config: Bitmap.Config = Bitmap.Config.ARGB_8888): Bitmap? =
+    open fun decodePage(index: Int, maxPixels: Long, config: Bitmap.Config = Bitmap.Config.ARGB_8888): Bitmap? =
         decodeImage(pageBytes(index), maxPixels, config)
 
     companion object {
@@ -35,12 +39,21 @@ abstract class ComicArchive : Closeable {
         fun isComicFile(name: String): Boolean =
             name.endsWith(".cbz", ignoreCase = true) || name.endsWith(".cbr", ignoreCase = true)
 
+        /** PDFs live with the books, but are read page by page like a comic. */
+        fun isPdf(name: String): Boolean = name.endsWith(".pdf", ignoreCase = true)
+
         /** Opens a comic. [cacheDir] is where CBRs are unpacked while being read. */
-        fun open(file: File, cacheDir: File): ComicArchive =
-            if (isZip(file)) ZipComic.open(file) else RarComic.open(file, cacheDir)
+        fun open(file: File, cacheDir: File): ComicArchive = when {
+            isPdf(file.name) -> PdfComic.open(file)
+            isZip(file) -> ZipComic.open(file)
+            else -> RarComic.open(file, cacheDir)
+        }
 
         /** The first page, for covers, without unpacking a whole CBR. */
         fun coverPage(file: File, maxPixels: Long): Bitmap? {
+            if (isPdf(file.name)) {
+                return PdfComic.open(file).use { if (it.pageCount == 0) null else it.decodePage(0, maxPixels) }
+            }
             if (isZip(file)) {
                 return ZipComic.open(file).use { if (it.pageCount == 0) null else it.decodePage(0, maxPixels) }
             }
@@ -67,6 +80,45 @@ abstract class ComicArchive : Closeable {
                 inPreferredConfig = config
             }
             return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+        }
+    }
+}
+
+/**
+ * PDF: Android's own renderer draws each page to a bitmap. It can only have one page open at a
+ * time, so drawing is serialised.
+ */
+private class PdfComic(private val pfd: ParcelFileDescriptor, private val renderer: PdfRenderer) : ComicArchive() {
+    override val pageCount: Int get() = renderer.pageCount
+
+    override fun decodePage(index: Int, maxPixels: Long, config: Bitmap.Config): Bitmap? = synchronized(renderer) {
+        renderer.openPage(index).use { page ->
+            // Page sizes are in points (1/72 inch); scale up to roughly maxPixels for sharp text.
+            val points = page.width.toDouble() * page.height
+            val scale = if (points <= 0) 1.0 else sqrt(maxPixels / points).coerceIn(0.5, 6.0)
+            val w = (page.width * scale).toInt().coerceAtLeast(1)
+            val h = (page.height * scale).toInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(Color.WHITE) // PDFs are drawn on transparent; pages should be paper white.
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            bitmap
+        }
+    }
+
+    override fun close() {
+        synchronized(renderer) { runCatching { renderer.close() } }
+        runCatching { pfd.close() }
+    }
+
+    companion object {
+        fun open(file: File): PdfComic {
+            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            try {
+                return PdfComic(pfd, PdfRenderer(pfd))
+            } catch (e: Exception) {
+                pfd.close()
+                throw e
+            }
         }
     }
 }

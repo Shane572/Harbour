@@ -114,7 +114,7 @@ fun BooksSection(vm: MainViewModel) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
                 Hint(
                     if (vm.scanning) "Looking for books…" else "No books yet",
-                    "Harbour finds .epub files in the same folders as your comics. Add a folder in Settings, " +
+                    "Harbour finds .epub and .pdf files in the same folders as your comics. Add a folder in Settings, " +
                         "or tap refresh on Home after adding books.",
                 )
             }

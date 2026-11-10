@@ -150,6 +150,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         bookProgressStore.save(b.key, p)
     }
 
+    /** PDF books are read by page: progress is stored as page (of pages), finished on the last one. */
+    fun pdfStartPage(b: Book, count: Int): Int {
+        val p = bookProgress[b.key] ?: return 0
+        return if (p.finished) 0 else p.chapter.coerceIn(0, (count - 1).coerceAtLeast(0))
+    }
+
+    fun savePdfProgress(b: Book, page: Int, count: Int) {
+        saveBookProgress(b, page, if (page >= count - 1) 1f else 0f, count)
+    }
+
     fun setBookRead(keys: Collection<String>, read: Boolean) {
         for (key in keys) {
             if (read) {

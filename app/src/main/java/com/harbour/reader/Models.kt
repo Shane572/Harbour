@@ -42,6 +42,11 @@ data class Book(
     override val title: String get() = bookTitle.ifBlank { name.substringBeforeLast('.') }
 
     override val key: String get() = "book:$folderPath/$name"
+
+    /** PDFs can't be re-flowed like EPUBs, so they're read page by page in the comic reader. */
+    val isPdf: Boolean get() = ComicArchive.isPdf(name)
+
+    fun asComic(): Comic = Comic(uri, name, folderPath, size, modified)
 }
 
 /** Where you are in a book: a chapter (spine item) and how far through it. */

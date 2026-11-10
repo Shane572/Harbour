@@ -107,7 +107,8 @@ class LibraryRepository(private val context: Context) {
             if (old != null && old.size == f.length() && old.modified == f.lastModified() && old.folderPath == path) {
                 old
             } else {
-                val meta = runCatching { EpubBook.open(f).use { it.title to it.author } }.getOrNull()
+                // PDFs carry no title Harbour can read, so they go by their file name.
+                val meta = if (ComicArchive.isPdf(f.name)) null else runCatching { EpubBook.open(f).use { it.title to it.author } }.getOrNull()
                 Book(uri, f.name, path, f.length(), f.lastModified(), meta?.first ?: "", meta?.second ?: "")
             }
         }
@@ -138,7 +139,7 @@ class LibraryRepository(private val context: Context) {
                     size = f.length(),
                     modified = f.lastModified(),
                 )
-                f.name.endsWith(".epub", ignoreCase = true) -> books += f to path
+                f.name.endsWith(".epub", ignoreCase = true) || ComicArchive.isPdf(f.name) -> books += f to path
             }
         }
     }

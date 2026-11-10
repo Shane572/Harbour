@@ -44,14 +44,15 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
 - `LibraryRepository.kt` — saved folders, scanning for `.cbz`/`.cbr`/`.epub`, library caches
 - `GroupStore.kt` — Shane's own groups (`groups.json`). Groups are made by hand and are
   deliberately unrelated to folders on disk; one group per comic.
-- `ComicArchive.kt` — CBZ via `MiniZip.kt`; CBR via libarchive, unpacked to `cache/cbr` (last 3 kept)
+- `ComicArchive.kt` — CBZ via `MiniZip.kt`; CBR via libarchive, unpacked to `cache/cbr` (last 3 kept);
+  PDF via Android's `PdfRenderer` (PDFs are books in the library)
 - `EpubBook.kt` — EPUB container/OPF/spine/contents parsing
 - `CoverCache.kt`, `ProgressStore.kt` (comics + books), `Updater.kt`, `StorageAccess.kt`, `HarbourApp.kt`
 - `ui/` — `LibraryScreen` (main layout, Home, welcome), `Sidebar`, `ComicsSection` (grids,
   selection, Add to group), `BooksSection`, `SettingsSection`, `ReaderScreen` (paged / two-page /
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme
 
-## Current state (build 14)
+## Current state (build 15)
 
 Works: collapsible sidebar (Home, All comics, Ungrouped, groups, Books, Settings); hand-made
 groups via long-press selection; CBZ and CBR comics; reader with direction per group (LTR, RTL,
@@ -59,6 +60,7 @@ vertical/webtoon), one/two/auto pages, fit width, zoom, next issue; EPUB books w
 spacing, margins, page colour, contents and progress; accent colour, dark/black, cover size,
 sorting; in-app updates. Build 14 added: search bar with refresh on every page (matches group
 name + title, whole-number issue matching), per-group Read Order (`Group.readOrder`, drives Up next
-and Next issue), Jump back in (last 3 groups opened, Home), and Delete from device (with confirm).
+and Next issue), Jump back in (last 3 groups opened, Home), and Delete from device (with confirm). Build 15: PDF books (Books tab, cover = page 1) read in
+the comic reader via `PdfRenderer` (`ReaderScreen` with a `book`); progress stored as page/pages.
 
 Not yet: grouping books, text selection or footnote links in books, pinch zoom in vertical mode.

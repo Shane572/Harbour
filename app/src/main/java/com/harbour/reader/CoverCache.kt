@@ -48,7 +48,7 @@ class CoverCache(context: Context) {
 
     private fun generate(c: LibraryItem, out: File): Boolean = runCatching {
         val page = when (c) {
-            is Book -> EpubBook.open(c.file).use { book ->
+            is Book -> if (c.isPdf) ComicArchive.coverPage(c.file, 900L * 1400L) else EpubBook.open(c.file).use { book ->
                 book.coverPath?.let(book::read)?.let { bytes ->
                     val opts = BitmapFactory.Options().apply { inSampleSize = sampleFor(bytes, 900L * 1400L) }
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
