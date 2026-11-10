@@ -60,7 +60,7 @@ vertical/webtoon), one/two/auto pages, fit width, zoom, next issue; EPUB books w
 spacing, margins, page colour, contents and progress; accent colour, dark/black, cover size,
 sorting; in-app updates. Build 14 added: search bar with refresh on every page (matches group
 name + title, whole-number issue matching), per-group Read Order (`Group.readOrder`, drives Up next
-and Next issue), Jump back in (last 3 groups opened, Home), and Delete from device (with confirm). Build 15: PDF books (Books tab, cover = page 1) read in
+and Next issue), Jump back in (last 3 groups opened, Home), and Delete from device (with confirm); Home shows only 3 groups (most recently read first). Build 15: PDF books (Books tab, cover = page 1) read in
 the comic reader via `PdfRenderer` (`ReaderScreen` with a `book`); progress stored as page/pages.
 
 Not yet: grouping books, text selection or footnote links in books, pinch zoom in vertical mode.

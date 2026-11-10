@@ -131,7 +131,12 @@ fun CoverSize.minCell(): Dp = when (this) {
 
 @Composable
 private fun HomeSection(vm: MainViewModel) {
-    val groups = vm.sortedGroups
+    // Just three groups: the ones you last read from, topped up A–Z. All groups are in the sidebar.
+    val recent = vm.recentGroups
+    val groups = remember(vm.sortedGroups, recent) {
+        val ids = recent.map { it.id }.toSet()
+        (recent + vm.sortedGroups.filter { it.id !in ids }).take(3)
+    }
     val continueReading = vm.continueReading
 
     LazyVerticalGrid(
@@ -148,7 +153,7 @@ private fun HomeSection(vm: MainViewModel) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         if (vm.scanning && vm.comics.isEmpty()) "Looking for comics…"
-                        else "${vm.comics.size} comics · ${groups.size} groups",
+                        else "${vm.comics.size} comics · ${vm.groups.size} groups",
                         style = MaterialTheme.typography.bodyMedium,
                         color = HarbourColors.Muted,
                     )
@@ -158,23 +163,6 @@ private fun HomeSection(vm: MainViewModel) {
 
         if (vm.update.showsBanner) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "update") { UpdateBanner(vm) }
-        }
-
-        val recent = vm.recentGroups
-        if (recent.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }, key = "recent-groups") {
-                Column {
-                    SectionLabel("Jump back in")
-                    Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-                        recent.forEach { g ->
-                            RecentGroupCard(vm, g, Modifier.weight(1f)) { vm.show(Section.InGroup(g.id)) }
-                        }
-                        // Keep cards the same width when there are fewer than three.
-                        repeat(3 - recent.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
         }
 
         if (continueReading.isNotEmpty()) {
@@ -277,13 +265,19 @@ private fun ContinueCard(comic: Comic, subtitle: String, progress: Progress?, on
     Row(
         Modifier
             .width(320.dp)
-            .height(132.dp)
+            .height(148.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(HarbourColors.Surface)
             .clickable(onClick = onClick)
             .padding(10.dp),
     ) {
-        CoverImage(comic, Modifier.fillMaxHeight().aspectRatio(2f / 3f), corner = 8.dp)
+        Column(Modifier.width(68.dp).fillMaxHeight()) {
+            CoverImage(comic, Modifier.fillMaxWidth().weight(1f), corner = 8.dp)
+            if (progress != null) {
+                Spacer(Modifier.height(6.dp))
+                CoverProgress(progress.fraction)
+            }
+        }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f).fillMaxHeight().padding(vertical = 4.dp)) {
             Text(
@@ -301,16 +295,6 @@ private fun ContinueCard(comic: Comic, subtitle: String, progress: Progress?, on
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.weight(1f))
-            if (progress != null) {
-                ProgressLine(progress.fraction)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Page ${progress.page + 1} of ${progress.total}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = HarbourColors.Muted,
-                )
-            }
         }
     }
 }
@@ -506,34 +490,4 @@ private fun SearchResults(vm: MainViewModel) {
             }
         },
     )
-}
-
-/** One of the last three groups you read from, with what's next in it. */
-@Composable
-private fun RecentGroupCard(vm: MainViewModel, group: Group, modifier: Modifier, onClick: () -> Unit) {
-    val next = vm.upNext(group)
-    val comics = remember(group, vm.comics) { vm.comicsIn(group) }
-    val read = comics.count { vm.progress[it.key]?.finished == true }
-    Row(
-        modifier
-            .height(132.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(HarbourColors.Surface)
-            .clickable(onClick = onClick)
-            .padding(10.dp),
-    ) {
-        CoverImage(next, Modifier.fillMaxHeight().aspectRatio(2f / 3f), corner = 8.dp)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f).fillMaxHeight().padding(vertical = 4.dp)) {
-            Text(group.name, style = MaterialTheme.typography.titleSmall, color = HarbourColors.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(2.dp))
-            if (next != null) {
-                Text("Next: ${next.title}", style = MaterialTheme.typography.labelSmall, color = HarbourColors.Accent, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            Spacer(Modifier.weight(1f))
-            ProgressLine(if (comics.isEmpty()) 0f else read.toFloat() / comics.size)
-            Spacer(Modifier.height(6.dp))
-            Text("$read of ${comics.size} read", style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted)
-        }
-    }
 }

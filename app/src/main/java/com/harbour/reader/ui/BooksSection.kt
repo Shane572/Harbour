@@ -131,26 +131,26 @@ private fun ContinueBookCard(book: Book, progress: BookProgress?, onClick: () ->
     Row(
         Modifier
             .width(320.dp)
-            .height(132.dp)
+            .height(148.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(HarbourColors.Surface)
             .clickable(onClick = onClick)
             .padding(10.dp),
     ) {
-        CoverImage(book, Modifier.fillMaxHeight().aspectRatio(2f / 3f), corner = 8.dp)
+        Column(Modifier.width(68.dp).fillMaxHeight()) {
+            CoverImage(book, Modifier.fillMaxWidth().weight(1f), corner = 8.dp)
+            if (progress != null) {
+                Spacer(Modifier.height(6.dp))
+                CoverProgress(progress.overall)
+            }
+        }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f).fillMaxHeight().padding(vertical = 4.dp)) {
             if (book.author.isNotBlank()) {
                 Text(book.author, style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(2.dp))
             }
-            Text(book.title, style = MaterialTheme.typography.titleSmall, color = HarbourColors.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.weight(1f))
-            if (progress != null) {
-                ProgressLine(progress.overall)
-                Spacer(Modifier.height(6.dp))
-                Text("${(progress.overall * 100).roundToInt()}% read", style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted)
-            }
+            Text(book.title, style = MaterialTheme.typography.titleSmall, color = HarbourColors.Text, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -201,14 +201,6 @@ fun BookCard(vm: MainViewModel, book: Book) {
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color.Black.copy(alpha = 0.45f)),
                 )
-            } else if (progress != null) {
-                ProgressLine(
-                    progress.overall,
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(8.dp),
-                    track = Color.Black.copy(alpha = 0.5f),
-                )
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Mark as read") }, onClick = {
@@ -224,6 +216,10 @@ fun BookCard(vm: MainViewModel, book: Book) {
                     confirmDelete = true
                 })
             }
+        }
+        if (progress != null && !progress.finished) {
+            Spacer(Modifier.height(6.dp))
+            CoverProgress(progress.overall)
         }
         Spacer(Modifier.height(8.dp))
         Text(

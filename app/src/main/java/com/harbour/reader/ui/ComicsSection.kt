@@ -514,14 +514,6 @@ private fun ComicCard(
                         )
                     }
                 }
-            } else if (progress != null) {
-                ProgressLine(
-                    progress.fraction,
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(8.dp),
-                    track = Color.Black.copy(alpha = 0.5f),
-                )
             }
             if (badge != null) {
                 // Position in the read order; the next one to read is picked out in the accent colour.
@@ -541,6 +533,10 @@ private fun ComicCard(
                     )
                 }
             }
+        }
+        if (progress != null && !progress.finished) {
+            Spacer(Modifier.height(6.dp))
+            CoverProgress(progress.fraction)
         }
         Spacer(Modifier.height(8.dp))
         Text(

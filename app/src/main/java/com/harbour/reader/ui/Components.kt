@@ -26,6 +26,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.text.style.TextAlign
@@ -93,6 +96,21 @@ fun CoverImage(comic: LibraryItem?, modifier: Modifier = Modifier, corner: Dp = 
                 color = HarbourColors.Muted.copy(alpha = 0.5f),
             )
         }
+    }
+}
+
+/** A progress bar with its percentage, shown just under a cover so it's always readable. */
+@Composable
+fun CoverProgress(fraction: Float, modifier: Modifier = Modifier) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.fillMaxWidth()) {
+        ProgressLine(fraction, Modifier.weight(1f))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "${(fraction.coerceIn(0f, 1f) * 100).roundToInt()}%",
+            style = MaterialTheme.typography.labelSmall,
+            color = HarbourColors.Muted,
+            maxLines = 1,
+        )
     }
 }
 
