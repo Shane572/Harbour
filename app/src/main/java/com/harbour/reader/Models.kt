@@ -75,8 +75,11 @@ data class BookStyle(
     val theme: BookTheme = BookTheme.Dark,
 )
 
-/** A collection Shane makes himself. Groups have nothing to do with folders on disk. */
-data class Group(val id: String, val name: String, val keys: List<String>)
+/**
+ * A collection Shane makes himself. Groups have nothing to do with folders on disk.
+ * [readOrder] is an optional hand-picked reading sequence (comic keys, all of them in [keys]).
+ */
+data class Group(val id: String, val name: String, val keys: List<String>, val readOrder: List<String> = emptyList())
 
 data class Progress(val page: Int, val total: Int, val time: Long) {
     val finished: Boolean get() = total > 0 && page >= total - 1

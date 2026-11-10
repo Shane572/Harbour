@@ -122,14 +122,7 @@ fun BooksSection(vm: MainViewModel) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "all-label") { SectionLabel("All books") }
         }
 
-        items(shown, key = { it.uri }) { book ->
-            BookCard(
-                book = book,
-                progress = vm.bookProgress[book.key],
-                onClick = { vm.openBook(book) },
-                onMarkRead = { read -> vm.setBookRead(listOf(book.key), read) },
-            )
-        }
+        items(shown, key = { it.uri }) { book -> BookCard(vm, book) }
     }
 }
 
@@ -162,11 +155,28 @@ private fun ContinueBookCard(book: Book, progress: BookProgress?, onClick: () ->
     }
 }
 
+/** A book in a grid. Long-press for mark read/unread and delete. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookCard(book: Book, progress: BookProgress?, onClick: () -> Unit, onMarkRead: (Boolean) -> Unit) {
+fun BookCard(vm: MainViewModel, book: Book) {
+    val progress = vm.bookProgress[book.key]
+    val onClick = { vm.openBook(book) }
+    val onMarkRead = { read: Boolean -> vm.setBookRead(listOf(book.key), read) }
     val haptics = LocalHapticFeedback.current
     var menu by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
+        ConfirmDialog(
+            title = "Delete this book from the tablet?",
+            text = "This permanently deletes \"${book.title}\" from your storage, not just from Harbour. It can't be undone.",
+            confirmLabel = "Delete",
+            onDismiss = { confirmDelete = false },
+            onConfirm = {
+                confirmDelete = false
+                vm.deleteFiles(listOf(book))
+            },
+        )
+    }
     Column(
         Modifier
             .clip(RoundedCornerShape(12.dp))
@@ -208,6 +218,10 @@ private fun BookCard(book: Book, progress: BookProgress?, onClick: () -> Unit, o
                 DropdownMenuItem(text = { Text("Mark as unread") }, onClick = {
                     menu = false
                     onMarkRead(false)
+                })
+                DropdownMenuItem(text = { Text("Delete from device…") }, onClick = {
+                    menu = false
+                    confirmDelete = true
                 })
             }
         }

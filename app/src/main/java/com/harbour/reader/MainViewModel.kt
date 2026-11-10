@@ -12,7 +12,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.harbour.reader.ui.AccentChoice
 import com.harbour.reader.ui.HarbourColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
@@ -321,15 +323,154 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val moving = keys.toSet()
         groups = groups.map { g ->
             val kept = g.keys.filterNot { it in moving }
-            if (g.id == id) g.copy(keys = kept + moving) else g.copy(keys = kept)
+            if (g.id == id) g.copy(keys = kept + moving) else g.copy(keys = kept, readOrder = g.readOrder.filterNot { it in moving })
         }
         groupStore.save(groups)
     }
 
     fun removeFromGroups(keys: Collection<String>) {
         val leaving = keys.toSet()
-        groups = groups.map { g -> g.copy(keys = g.keys.filterNot { it in leaving }) }
+        groups = groups.map { g ->
+            g.copy(keys = g.keys.filterNot { it in leaving }, readOrder = g.readOrder.filterNot { it in leaving })
+        }
         groupStore.save(groups)
+    }
+
+    // Read order: a hand-picked reading sequence at the top of a group
+
+    fun readOrderOf(g: Group): List<Comic> = g.readOrder.mapNotNull { comicsByKey[it] }
+
+    /** Adds comics to the end of the group's read order, in natural order. */
+    fun addToReadOrder(groupId: String, keys: Collection<String>) {
+        updateGroup(groupId) { g ->
+            val adding = keys.filter { it in g.keys && it !in g.readOrder }
+                .sortedWith(compareBy(NaturalOrder) { comicsByKey[it]?.name ?: it })
+            g.copy(readOrder = g.readOrder + adding)
+        }
+    }
+
+    fun removeFromReadOrder(groupId: String, keys: Collection<String>) {
+        val leaving = keys.toSet()
+        updateGroup(groupId) { g -> g.copy(readOrder = g.readOrder.filterNot { it in leaving }) }
+    }
+
+    /** Moves one comic earlier (-1) or later (+1) in the read order. */
+    fun moveInReadOrder(groupId: String, key: String, delta: Int) {
+        updateGroup(groupId) { g ->
+            val i = g.readOrder.indexOf(key)
+            val j = i + delta
+            if (i < 0 || j !in g.readOrder.indices) {
+                g
+            } else {
+                val list = g.readOrder.toMutableList()
+                list.removeAt(i)
+                list.add(j, key)
+                g.copy(readOrder = list)
+            }
+        }
+    }
+
+    private fun updateGroup(id: String, change: (Group) -> Group) {
+        groups = groups.map { if (it.id == id) change(it) else it }
+        groupStore.save(groups)
+    }
+
+    /** What to read next in a group: the first unread in its read order, then the first unread overall. */
+    fun upNext(g: Group): Comic? {
+        val unread = { c: Comic -> progress[c.key]?.finished != true }
+        return readOrderOf(g).firstOrNull(unread)
+            ?: comicsIn(g).firstOrNull(unread)
+            ?: readOrderOf(g).firstOrNull()
+            ?: comicsIn(g).firstOrNull()
+    }
+
+    // Recently opened groups, newest first, for Home
+
+    private var recentGroupIds by mutableStateOf(
+        settings.getString("recentGroups", null)?.split(',')?.filter { it.isNotBlank() } ?: emptyList(),
+    )
+
+    val recentGroups: List<Group> by derivedStateOf {
+        recentGroupIds.mapNotNull { id -> groups.firstOrNull { it.id == id } }.take(3)
+    }
+
+    private fun noteOpened(c: Comic) {
+        val id = groupOfKey[c.key]?.id ?: return
+        recentGroupIds = (listOf(id) + recentGroupIds.filter { it != id }).take(6)
+        settings.edit().putString("recentGroups", recentGroupIds.joinToString(",")).apply()
+    }
+
+    // Search
+
+    var searchQuery by mutableStateOf("")
+        private set
+
+    fun search(q: String) {
+        searchQuery = q
+    }
+
+    /**
+     * Every word must match. Words are matched against the group name plus the title, so
+     * "green lantern 48" finds issue 48 in the Green Lantern group. Numbers match whole numbers
+     * ("48" matches "#048" but not "148"); "#" is ignored.
+     */
+    fun searchComics(q: String): List<Comic> {
+        val terms = searchTerms(q)
+        if (terms.isEmpty()) return emptyList()
+        return comics
+            .filter { c -> matches(terms, "${groupOfKey[c.key]?.name ?: ""} ${c.title} ${c.name}") }
+            .sortedWith(
+                compareBy<Comic> { groupOfKey[it.key] == null }
+                    .thenBy(NaturalOrder) { groupOfKey[it.key]?.name ?: "" }
+                    .thenBy(NaturalOrder) { it.name },
+            )
+    }
+
+    fun searchBooks(q: String): List<Book> {
+        val terms = searchTerms(q)
+        if (terms.isEmpty()) return emptyList()
+        return books.filter { b -> matches(terms, "${b.title} ${b.author} ${b.name}") }
+            .sortedWith(compareBy(NaturalOrder) { it.title })
+    }
+
+    private fun searchTerms(q: String): List<String> =
+        q.lowercase().replace("#", " ").split(WHITESPACE).filter { it.isNotBlank() }
+
+    private fun matches(terms: List<String>, text: String): Boolean {
+        val hay = text.lowercase()
+        val numbers = DIGITS.findAll(hay).map { it.value.trimStart('0').ifEmpty { "0" } }.toSet()
+        return terms.all { t ->
+            if (t.all { it.isDigit() }) t.trimStart('0').ifEmpty { "0" } in numbers else t in hay
+        }
+    }
+
+    // Deleting files
+
+    /** Deletes the files themselves from the tablet, then forgets them. Can't be undone. */
+    fun deleteFiles(items: Collection<LibraryItem>) {
+        val list = items.toList()
+        viewModelScope.launch {
+            val gone = withContext(Dispatchers.IO) {
+                list.filter { runCatching { it.file.delete() || !it.file.exists() }.getOrDefault(false) }
+            }
+            val keys = gone.map { it.key }.toSet()
+            comics = comics.filterNot { it.key in keys }
+            books = books.filterNot { it.key in keys }
+            removeFromGroups(keys)
+            keys.forEach {
+                progress.remove(it)
+                progressStore.clear(it)
+                bookProgress.remove(it)
+                bookProgressStore.clear(it)
+            }
+            val failed = list.size - gone.size
+            message = when {
+                failed == 0 && gone.size == 1 -> "Deleted ${gone[0].title}"
+                failed == 0 -> "Deleted ${gone.size} files"
+                else -> "Couldn't delete $failed of ${list.size} files"
+            }
+            rescan()
+        }
     }
 
     // Navigation
@@ -341,23 +482,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun back() {
         when {
             backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
+            searchQuery.isNotEmpty() -> searchQuery = ""
             section != Section.Home -> section = Section.Home
         }
     }
 
-    val canGoBack: Boolean get() = backStack.size > 1 || section != Section.Home
+    val canGoBack: Boolean get() = backStack.size > 1 || section != Section.Home || searchQuery.isNotEmpty()
 
     fun openComic(c: Comic) {
+        noteOpened(c)
         backStack.add(Screen.Reader(c))
     }
 
     fun switchToComic(c: Comic) {
+        noteOpened(c)
         backStack[backStack.lastIndex] = Screen.Reader(c)
     }
 
-    /** The next issue: next in the comic's group, or in its folder until it's been grouped. */
+    /**
+     * The next issue: next in the group's read order if the comic is in it, otherwise next in the
+     * group (or in its folder until it's been grouped).
+     */
     fun nextComic(c: Comic): Comic? {
-        val list = groupOfKey[c.key]?.let(::comicsIn)
+        val group = groupOfKey[c.key]
+        if (group != null && c.key in group.readOrder) {
+            val order = readOrderOf(group)
+            return order.getOrNull(order.indexOfFirst { it.key == c.key } + 1)
+        }
+        val list = group?.let(::comicsIn)
             ?: comics.filter { it.folderPath == c.folderPath }.sortedWith(compareBy(NaturalOrder) { it.name })
         val i = list.indexOfFirst { it.key == c.key }
         return if (i < 0) null else list.getOrNull(i + 1)
@@ -417,6 +569,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         settings.edit().putBoolean("fitWidth", on).apply()
     }
 }
+
+private val WHITESPACE = Regex("\\s+")
+private val DIGITS = Regex("\\d+")
 
 private inline fun <reified T : Enum<T>> enumValueOr(name: String?, default: T): T =
     enumValues<T>().firstOrNull { it.name == name } ?: default

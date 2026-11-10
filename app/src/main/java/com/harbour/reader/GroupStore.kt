@@ -15,14 +15,23 @@ class GroupStore(context: Context) {
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             val keys = o.getJSONArray("keys")
-            Group(o.getString("id"), o.getString("name"), (0 until keys.length()).map { keys.getString(it) })
+            val order = o.optJSONArray("order")
+            Group(
+                id = o.getString("id"),
+                name = o.getString("name"),
+                keys = (0 until keys.length()).map { keys.getString(it) },
+                readOrder = order?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
+            )
         }
     }.getOrDefault(emptyList())
 
     fun save(groups: List<Group>) {
         val arr = JSONArray()
         groups.forEach { g ->
-            arr.put(JSONObject().put("id", g.id).put("name", g.name).put("keys", JSONArray(g.keys)))
+            arr.put(
+                JSONObject().put("id", g.id).put("name", g.name)
+                    .put("keys", JSONArray(g.keys)).put("order", JSONArray(g.readOrder)),
+            )
         }
         // Write then rename, so a crash mid-write can't wipe the groups.
         val tmp = File(file.path + ".tmp")

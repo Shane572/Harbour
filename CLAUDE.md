@@ -51,12 +51,14 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   selection, Add to group), `BooksSection`, `SettingsSection`, `ReaderScreen` (paged / two-page /
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme
 
-## Current state (build 13)
+## Current state (build 14)
 
 Works: collapsible sidebar (Home, All comics, Ungrouped, groups, Books, Settings); hand-made
 groups via long-press selection; CBZ and CBR comics; reader with direction per group (LTR, RTL,
 vertical/webtoon), one/two/auto pages, fit width, zoom, next issue; EPUB books with font, size,
 spacing, margins, page colour, contents and progress; accent colour, dark/black, cover size,
-sorting; in-app updates.
+sorting; in-app updates. Build 14 added: search bar with refresh on every page (matches group
+name + title, whole-number issue matching), per-group Read Order (`Group.readOrder`, drives Up next
+and Next issue), Jump back in (last 3 groups opened, Home), and Delete from device (with confirm).
 
 Not yet: grouping books, text selection or footnote links in books, pinch zoom in vertical mode.

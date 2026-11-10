@@ -23,11 +23,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,6 +58,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.harbour.reader.Comic
 import com.harbour.reader.Group
 import com.harbour.reader.MainViewModel
@@ -64,15 +66,29 @@ import com.harbour.reader.Progress
 import com.harbour.reader.SortOrder
 
 /**
- * A grid of comics: All comics, Ungrouped, or one group. Long-press starts selecting, which is
- * how comics get sorted into groups.
+ * A grid of comics: All comics, Ungrouped, one group, or search results. Long-press starts
+ * selecting, which is how comics get sorted into groups and read orders (or deleted).
  */
 @Composable
-fun ComicsSection(vm: MainViewModel, title: String, comics: List<Comic>, group: Group?) {
+fun ComicsSection(
+    vm: MainViewModel,
+    title: String,
+    comics: List<Comic>,
+    group: Group?,
+    subtitle: String? = null,
+    presorted: Boolean = false,
+    emptyHint: Pair<String, String>? = null,
+    extraItems: (LazyGridScope.() -> Unit)? = null,
+) {
     var selected by remember { mutableStateOf(emptySet<String>()) }
     var picking by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     val selecting = selected.isNotEmpty()
-    val shown = remember(comics, vm.sort) { vm.sorted(comics) }
+    val shown = remember(comics, vm.sort, presorted) { if (presorted) comics else vm.sorted(comics) }
+    val readOrder = remember(group, vm.comics) { group?.let(vm::readOrderOf) ?: emptyList() }
+    val inOrder = group?.readOrder?.toSet() ?: emptySet()
+    val rest = if (inOrder.isEmpty()) shown else shown.filter { it.key !in inOrder }
+    val upNext = group?.let(vm::upNext)
 
     BackHandler(enabled = selecting) { selected = emptySet() }
 
@@ -80,31 +96,73 @@ fun ComicsSection(vm: MainViewModel, title: String, comics: List<Comic>, group: 
         selected = if (c.key in selected) selected - c.key else selected + c.key
     }
 
+    fun done() {
+        selected = emptySet()
+    }
+
+    val addsToOrder = group != null && selected.any { it !in inOrder }
+    val actions = buildList<Pair<String, () -> Unit>> {
+        add("Select all" to { selected = shown.map { it.key }.toSet() })
+        if (group != null) {
+            if (addsToOrder) add("Add to group" to { picking = true })
+            if (selected.any { it in inOrder }) {
+                add("Remove from read order" to {
+                    vm.removeFromReadOrder(group.id, selected)
+                    done()
+                })
+            }
+            val only = selected.singleOrNull()
+            if (only != null && only in inOrder) {
+                add("Move earlier in read order" to { vm.moveInReadOrder(group.id, only, -1) })
+                add("Move later in read order" to { vm.moveInReadOrder(group.id, only, 1) })
+            }
+        }
+        if (selected.any { it in vm.groupOfKey }) {
+            add("Remove from group" to {
+                vm.removeFromGroups(selected)
+                done()
+            })
+        }
+        add("Mark as read" to {
+            vm.setRead(selected, true)
+            done()
+        })
+        add("Mark as unread" to {
+            vm.setRead(selected, false)
+            done()
+        })
+        add("Delete from device…" to { confirmDelete = true })
+    }
+
     Column(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                .padding(start = 28.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+                .padding(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
         ) {
             if (selecting) {
                 SelectionBar(
                     count = selected.size,
-                    anyGrouped = selected.any { it in vm.groupOfKey },
-                    onClose = { selected = emptySet() },
-                    onSelectAll = { selected = shown.map { it.key }.toSet() },
-                    onAddToGroup = { picking = true },
-                    onRemoveFromGroup = {
-                        vm.removeFromGroups(selected)
-                        selected = emptySet()
+                    primaryLabel = if (addsToOrder) "Add to read order" else "Add to group",
+                    onPrimary = {
+                        if (addsToOrder) {
+                            vm.addToReadOrder(group.id, selected)
+                            done()
+                        } else {
+                            picking = true
+                        }
                     },
-                    onMarkRead = { read ->
-                        vm.setRead(selected, read)
-                        selected = emptySet()
-                    },
+                    actions = actions,
+                    onClose = ::done,
                 )
             } else {
-                SectionHeader(vm, title, comics.size, group)
+                SectionHeader(
+                    vm = vm,
+                    title = title,
+                    subtitle = subtitle ?: if (comics.size == 1) "1 comic" else "${comics.size} comics",
+                    group = group,
+                    showSort = !presorted,
+                )
             }
         }
 
@@ -120,13 +178,12 @@ fun ComicsSection(vm: MainViewModel, title: String, comics: List<Comic>, group: 
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            if (group != null && comics.isNotEmpty() && !selecting) {
+            if (upNext != null && !selecting) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "resume") {
-                    val next = comics.firstOrNull { vm.progress[it.key]?.finished != true } ?: comics.first()
-                    val started = vm.progress[next.key] != null
-                    Row {
+                    val started = vm.progress[upNext.key] != null
+                    Column {
                         Button(
-                            onClick = { vm.openComic(next) },
+                            onClick = { vm.openComic(upNext) },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = HarbourColors.Accent,
                                 contentColor = HarbourColors.OnAccent,
@@ -134,26 +191,62 @@ fun ComicsSection(vm: MainViewModel, title: String, comics: List<Comic>, group: 
                             contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp),
                         ) {
                             Text(
-                                (if (started) "Continue · " else "Start · ") + next.title,
+                                (if (started) "Continue · " else "Up next · ") + upNext.title,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.titleSmall,
+                            )
+                        }
+                        if (readOrder.isEmpty() && comics.size > 1) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Tip: long-press issues and tap Add to read order to line up what you read next.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = HarbourColors.Muted,
                             )
                         }
                     }
                 }
             }
 
+            if (readOrder.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "order-label") {
+                    val read = readOrder.count { vm.progress[it.key]?.finished == true }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SectionLabel("Read order")
+                        Spacer(Modifier.width(10.dp))
+                        Text("$read of ${readOrder.size} read", style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted)
+                    }
+                }
+                itemsIndexed(readOrder, key = { _, c -> "order:" + c.uri }) { i, comic ->
+                    ComicCard(
+                        comic = comic,
+                        progress = vm.progress[comic.key],
+                        subtitle = null,
+                        selected = comic.key in selected,
+                        selecting = selecting,
+                        badge = i + 1,
+                        badgeHighlighted = comic.key == upNext?.key,
+                        onClick = { if (selecting) toggle(comic) else vm.openComic(comic) },
+                        onLongClick = { toggle(comic) },
+                    )
+                }
+                if (rest.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "rest-label") { SectionLabel("All issues") }
+                }
+            }
+
+            extraItems?.invoke(this)
+
             if (comics.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
-                    Hint(
-                        if (group != null) "This group is empty" else "Nothing here",
-                        when {
-                            group != null -> "Go to All comics or Ungrouped, long-press comics to select them, then tap Add to group."
-                            title == "Ungrouped" -> "Every comic is in a group."
-                            else -> "Add a folder in Settings, or tap refresh on Home after adding files."
-                        },
-                    )
+                    val (hintTitle, hintBody) = emptyHint ?: when {
+                        group != null -> "This group is empty" to
+                            "Go to All comics or Ungrouped, long-press comics to select them, then tap Add to group."
+                        title == "Ungrouped" -> "Nothing here" to "Every comic is in a group."
+                        else -> "Nothing here" to "Add a folder in Settings, or tap refresh after adding files."
+                    }
+                    Hint(hintTitle, hintBody)
                 }
             } else if (!selecting && group == null && vm.groups.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "tip") {
@@ -165,7 +258,7 @@ fun ComicsSection(vm: MainViewModel, title: String, comics: List<Comic>, group: 
                 }
             }
 
-            items(shown, key = { it.uri }) { comic ->
+            items(rest, key = { it.uri }) { comic ->
                 ComicCard(
                     comic = comic,
                     progress = vm.progress[comic.key],
@@ -187,21 +280,36 @@ fun ComicsSection(vm: MainViewModel, title: String, comics: List<Comic>, group: 
             onPick = { g ->
                 vm.addToGroup(g.id, selected)
                 picking = false
-                selected = emptySet()
+                done()
                 vm.message = "Added to ${g.name}"
             },
             onCreate = { name ->
                 val g = vm.createGroup(name, selected)
                 picking = false
-                selected = emptySet()
+                done()
                 vm.message = "Made the group ${g.name}"
+            },
+        )
+    }
+
+    if (confirmDelete) {
+        val n = selected.size
+        ConfirmDialog(
+            title = if (n == 1) "Delete this comic from the tablet?" else "Delete $n comics from the tablet?",
+            text = "This permanently deletes the files from your storage, not just from Harbour. It can't be undone.",
+            confirmLabel = "Delete",
+            onDismiss = { confirmDelete = false },
+            onConfirm = {
+                vm.deleteFiles(selected.mapNotNull { vm.comicsByKey[it] })
+                confirmDelete = false
+                done()
             },
         )
     }
 }
 
 @Composable
-private fun SectionHeader(vm: MainViewModel, title: String, count: Int, group: Group?) {
+private fun SectionHeader(vm: MainViewModel, title: String, subtitle: String, group: Group?, showSort: Boolean) {
     var sortMenu by remember { mutableStateOf(false) }
     var groupMenu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -217,12 +325,12 @@ private fun SectionHeader(vm: MainViewModel, title: String, count: Int, group: G
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                if (count == 1) "1 comic" else "$count comics",
+                subtitle,
                 style = MaterialTheme.typography.labelSmall,
                 color = HarbourColors.Muted,
             )
         }
-        Box {
+        if (showSort) Box {
             TextButton(onClick = { sortMenu = true }) {
                 Text(vm.sort.label, color = HarbourColors.Muted)
                 Icon(Icons.Filled.ArrowDropDown, contentDescription = "Sort", tint = HarbourColors.Muted)
@@ -287,12 +395,10 @@ private fun SectionHeader(vm: MainViewModel, title: String, count: Int, group: G
 @Composable
 private fun SelectionBar(
     count: Int,
-    anyGrouped: Boolean,
+    primaryLabel: String,
+    onPrimary: () -> Unit,
+    actions: List<Pair<String, () -> Unit>>,
     onClose: () -> Unit,
-    onSelectAll: () -> Unit,
-    onAddToGroup: () -> Unit,
-    onRemoveFromGroup: () -> Unit,
-    onMarkRead: (Boolean) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     Row(
@@ -314,35 +420,23 @@ private fun SelectionBar(
             modifier = Modifier.weight(1f),
         )
         Button(
-            onClick = onAddToGroup,
+            onClick = onPrimary,
             colors = ButtonDefaults.buttonColors(containerColor = HarbourColors.Accent, contentColor = HarbourColors.OnAccent),
             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
         ) {
-            Text("Add to group")
+            Text(primaryLabel)
         }
         Box {
             IconButton(onClick = { menu = true }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = HarbourColors.Text)
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Select all") }, onClick = {
-                    menu = false
-                    onSelectAll()
-                })
-                if (anyGrouped) {
-                    DropdownMenuItem(text = { Text("Remove from group") }, onClick = {
+                actions.forEach { (label, action) ->
+                    DropdownMenuItem(text = { Text(label) }, onClick = {
                         menu = false
-                        onRemoveFromGroup()
+                        action()
                     })
                 }
-                DropdownMenuItem(text = { Text("Mark as read") }, onClick = {
-                    menu = false
-                    onMarkRead(true)
-                })
-                DropdownMenuItem(text = { Text("Mark as unread") }, onClick = {
-                    menu = false
-                    onMarkRead(false)
-                })
             }
         }
     }
@@ -358,6 +452,8 @@ private fun ComicCard(
     selecting: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    badge: Int? = null,
+    badgeHighlighted: Boolean = false,
 ) {
     val haptics = LocalHapticFeedback.current
     Column(
@@ -426,6 +522,24 @@ private fun ComicCard(
                         .padding(8.dp),
                     track = Color.Black.copy(alpha = 0.5f),
                 )
+            }
+            if (badge != null) {
+                // Position in the read order; the next one to read is picked out in the accent colour.
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(if (badgeHighlighted) HarbourColors.Accent else Color.Black.copy(alpha = 0.7f)),
+                ) {
+                    Text(
+                        "$badge",
+                        style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.sp),
+                        color = if (badgeHighlighted) HarbourColors.OnAccent else Color.White,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
