@@ -1,0 +1,32 @@
+# Folio
+
+A sleek, dark comic reader for Android tablets. Point it at the folder your comics live in and it
+does the rest.
+
+## What it does
+
+- **Your folders, your library.** Pick one or more folders. Folio finds every `.cbz` inside them,
+  including subfolders, and each folder becomes a series.
+- **Covers and stacks.** Series show as cover stacks; issues sort naturally (2 comes before 10).
+- **Continue reading.** The home screen keeps your in-progress comics up front, with page progress.
+- **A proper reader.** Full screen, swipe or tap the edges to turn pages, tap the middle for
+  controls, pinch or double-tap to zoom, and a page slider for jumping around.
+- **Manga mode.** Switch any series to right-to-left; Folio remembers it per series.
+- **Next issue.** On the last page, one tap opens the next issue in the series.
+- **Mark as read.** Long-press an issue to mark it read or unread.
+
+## Getting it onto your tablet
+
+Every push to `main` builds the app on GitHub and publishes it as a release.
+
+1. On the tablet, open `https://github.com/<owner>/<repo>/releases/latest`.
+2. Tap **Folio.apk** to download it, then open it.
+3. If Android asks, allow your browser to install apps ("Install unknown apps").
+4. Open Folio and choose your comics folder.
+
+Later builds install straight over the top, keeping your folders and reading progress.
+
+## Building it yourself
+
+Open the project in Android Studio, or run `./gradlew assembleDebug` with the Android SDK
+installed. The APK lands in `app/build/outputs/apk/debug/`.
