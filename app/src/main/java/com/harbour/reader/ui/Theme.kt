@@ -1,4 +1,4 @@
-package com.folio.reader.ui
+package com.harbour.reader.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-object FolioColors {
+object HarbourColors {
     val Bg = Color(0xFF0C0C0E)
     val Surface = Color(0xFF151518)
     val SurfaceHigh = Color(0xFF1E1E23)
@@ -21,23 +21,23 @@ object FolioColors {
 }
 
 private val scheme = darkColorScheme(
-    primary = FolioColors.Accent,
-    onPrimary = FolioColors.OnAccent,
-    secondary = FolioColors.Accent,
-    onSecondary = FolioColors.OnAccent,
-    background = FolioColors.Bg,
-    onBackground = FolioColors.Text,
-    surface = FolioColors.Bg,
-    onSurface = FolioColors.Text,
-    surfaceVariant = FolioColors.SurfaceHigh,
-    onSurfaceVariant = FolioColors.Muted,
-    surfaceContainerLowest = FolioColors.Bg,
-    surfaceContainerLow = FolioColors.Surface,
-    surfaceContainer = FolioColors.Surface,
-    surfaceContainerHigh = FolioColors.SurfaceHigh,
-    surfaceContainerHighest = FolioColors.SurfaceHighest,
-    outline = FolioColors.Outline,
-    outlineVariant = FolioColors.Outline,
+    primary = HarbourColors.Accent,
+    onPrimary = HarbourColors.OnAccent,
+    secondary = HarbourColors.Accent,
+    onSecondary = HarbourColors.OnAccent,
+    background = HarbourColors.Bg,
+    onBackground = HarbourColors.Text,
+    surface = HarbourColors.Bg,
+    onSurface = HarbourColors.Text,
+    surfaceVariant = HarbourColors.SurfaceHigh,
+    onSurfaceVariant = HarbourColors.Muted,
+    surfaceContainerLowest = HarbourColors.Bg,
+    surfaceContainerLow = HarbourColors.Surface,
+    surfaceContainer = HarbourColors.Surface,
+    surfaceContainerHigh = HarbourColors.SurfaceHigh,
+    surfaceContainerHighest = HarbourColors.SurfaceHighest,
+    outline = HarbourColors.Outline,
+    outlineVariant = HarbourColors.Outline,
 )
 
 private val typography = Typography().let { t ->
@@ -52,6 +52,6 @@ private val typography = Typography().let { t ->
 }
 
 @Composable
-fun FolioTheme(content: @Composable () -> Unit) {
+fun HarbourTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, typography = typography, content = content)
 }

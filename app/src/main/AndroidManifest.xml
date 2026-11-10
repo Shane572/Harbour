@@ -7,7 +7,7 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:largeHeap="true"
-        android:theme="@style/Theme.Folio">
+        android:theme="@style/Theme.Harbour">
 
         <activity
             android:name=".MainActivity"

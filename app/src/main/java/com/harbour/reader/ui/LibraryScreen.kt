@@ -1,4 +1,4 @@
-package com.folio.reader.ui
+package com.harbour.reader.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,9 +55,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.folio.reader.Comic
-import com.folio.reader.MainViewModel
-import com.folio.reader.Series
+import com.harbour.reader.Comic
+import com.harbour.reader.MainViewModel
+import com.harbour.reader.Series
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +67,7 @@ fun LibraryScreen(vm: MainViewModel, onAddFolder: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(FolioColors.Bg),
+            .background(HarbourColors.Bg),
     ) {
         if (vm.roots.isEmpty()) {
             EmptyLibrary(onAddFolder)
@@ -79,7 +79,7 @@ fun LibraryScreen(vm: MainViewModel, onAddFolder: () -> Unit) {
     if (showFolders) {
         ModalBottomSheet(
             onDismissRequest = { showFolders = false },
-            containerColor = FolioColors.Surface,
+            containerColor = HarbourColors.Surface,
         ) {
             FoldersSheet(vm, onAddFolder = {
                 showFolders = false
@@ -140,10 +140,10 @@ private fun LibraryGrid(vm: MainViewModel, onOpenFolders: () -> Unit) {
         if (series.isEmpty() && !vm.scanning) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "nothing") {
                 Text(
-                    "Folio looks for .cbz files in your folders and their subfolders. " +
+                    "Harbour looks for .cbz files in your folders and their subfolders. " +
                         "Check the folder in settings, or tap refresh after adding files.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = FolioColors.Muted,
+                    color = HarbourColors.Muted,
                 )
             }
         }
@@ -165,39 +165,39 @@ private fun Header(
 ) {
     Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
-            Text("FOLIO", style = MaterialTheme.typography.labelMedium, color = FolioColors.Accent)
+            Text("HARBOUR", style = MaterialTheme.typography.labelMedium, color = HarbourColors.Accent)
             Spacer(Modifier.height(6.dp))
-            Text("Library", style = MaterialTheme.typography.displaySmall, color = FolioColors.Text)
+            Text("Library", style = MaterialTheme.typography.displaySmall, color = HarbourColors.Text)
             Spacer(Modifier.height(4.dp))
             Text(
                 if (scanning && comicCount == 0) "Looking for comics…"
                 else "$comicCount comics · $seriesCount series",
                 style = MaterialTheme.typography.bodyMedium,
-                color = FolioColors.Muted,
+                color = HarbourColors.Muted,
             )
         }
         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
             if (scanning) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
-                    color = FolioColors.Accent,
+                    color = HarbourColors.Accent,
                     strokeWidth = 2.dp,
                 )
             } else {
                 IconButton(onClick = onRefresh) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Rescan folders", tint = FolioColors.Muted)
+                    Icon(Icons.Filled.Refresh, contentDescription = "Rescan folders", tint = HarbourColors.Muted)
                 }
             }
         }
         IconButton(onClick = onFolders) {
-            Icon(Icons.Filled.Settings, contentDescription = "Folders", tint = FolioColors.Muted)
+            Icon(Icons.Filled.Settings, contentDescription = "Folders", tint = HarbourColors.Muted)
         }
     }
 }
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = FolioColors.Muted)
+    Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = HarbourColors.Muted)
 }
 
 @Composable
@@ -207,7 +207,7 @@ private fun ContinueCard(comic: Comic, pages: Pair<Int, Int>?, onClick: () -> Un
             .width(320.dp)
             .height(132.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(FolioColors.Surface)
+            .background(HarbourColors.Surface)
             .clickable(onClick = onClick)
             .padding(10.dp),
     ) {
@@ -217,7 +217,7 @@ private fun ContinueCard(comic: Comic, pages: Pair<Int, Int>?, onClick: () -> Un
             Text(
                 comic.seriesName,
                 style = MaterialTheme.typography.labelSmall,
-                color = FolioColors.Muted,
+                color = HarbourColors.Muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -225,7 +225,7 @@ private fun ContinueCard(comic: Comic, pages: Pair<Int, Int>?, onClick: () -> Un
             Text(
                 comic.title,
                 style = MaterialTheme.typography.titleSmall,
-                color = FolioColors.Text,
+                color = HarbourColors.Text,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -237,7 +237,7 @@ private fun ContinueCard(comic: Comic, pages: Pair<Int, Int>?, onClick: () -> Un
                 Text(
                     "Page ${page + 1} of $total",
                     style = MaterialTheme.typography.labelSmall,
-                    color = FolioColors.Muted,
+                    color = HarbourColors.Muted,
                 )
             }
         }
@@ -263,7 +263,7 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
                         .fillMaxSize()
                         .padding(horizontal = 9.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(FolioColors.SurfaceHighest),
+                        .background(HarbourColors.SurfaceHighest),
                 )
             }
             CoverImage(
@@ -277,7 +277,7 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
         Text(
             series.name,
             style = MaterialTheme.typography.titleSmall,
-            color = FolioColors.Text,
+            color = HarbourColors.Text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -287,7 +287,7 @@ private fun SeriesCard(series: Series, readCount: Int, onClick: () -> Unit) {
                 if (readCount > 0) append(" · $readCount read")
             },
             style = MaterialTheme.typography.labelSmall,
-            color = FolioColors.Muted,
+            color = HarbourColors.Muted,
         )
     }
 }
@@ -301,27 +301,27 @@ private fun EmptyLibrary(onAddFolder: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("FOLIO", style = MaterialTheme.typography.labelMedium, color = FolioColors.Accent)
+        Text("HARBOUR", style = MaterialTheme.typography.labelMedium, color = HarbourColors.Accent)
         Spacer(Modifier.height(12.dp))
         Text(
             "Your comics, beautifully",
             style = MaterialTheme.typography.displaySmall,
-            color = FolioColors.Text,
+            color = HarbourColors.Text,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(14.dp))
         Text(
-            "Choose the folder where your comics live. Folio finds every .cbz inside it, " +
+            "Choose the folder where your comics live. Harbour finds every .cbz inside it, " +
                 "and each subfolder becomes a series.",
             style = MaterialTheme.typography.bodyLarge,
-            color = FolioColors.Muted,
+            color = HarbourColors.Muted,
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 460.dp),
         )
         Spacer(Modifier.height(28.dp))
         Button(
             onClick = onAddFolder,
-            colors = ButtonDefaults.buttonColors(containerColor = FolioColors.Accent, contentColor = FolioColors.OnAccent),
+            colors = ButtonDefaults.buttonColors(containerColor = HarbourColors.Accent, contentColor = HarbourColors.OnAccent),
             contentPadding = PaddingValues(horizontal = 28.dp, vertical = 14.dp),
         ) {
             Text("Choose folder", style = MaterialTheme.typography.titleSmall)
@@ -337,12 +337,12 @@ private fun FoldersSheet(vm: MainViewModel, onAddFolder: () -> Unit) {
             .navigationBarsPadding()
             .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
     ) {
-        Text("Folders", style = MaterialTheme.typography.titleLarge, color = FolioColors.Text)
+        Text("Folders", style = MaterialTheme.typography.titleLarge, color = HarbourColors.Text)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Folio scans these folders and everything inside them.",
+            "Harbour scans these folders and everything inside them.",
             style = MaterialTheme.typography.bodyMedium,
-            color = FolioColors.Muted,
+            color = HarbourColors.Muted,
         )
         Spacer(Modifier.height(16.dp))
         vm.roots.forEach { root ->
@@ -352,14 +352,14 @@ private fun FoldersSheet(vm: MainViewModel, onAddFolder: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(root.name, style = MaterialTheme.typography.titleMedium, color = FolioColors.Text)
-                    Text("$count comics", style = MaterialTheme.typography.labelSmall, color = FolioColors.Muted)
+                    Text(root.name, style = MaterialTheme.typography.titleMedium, color = HarbourColors.Text)
+                    Text("$count comics", style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted)
                 }
                 IconButton(onClick = { vm.removeRoot(root) }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Remove ${root.name}", tint = FolioColors.Muted)
+                    Icon(Icons.Filled.Close, contentDescription = "Remove ${root.name}", tint = HarbourColors.Muted)
                 }
             }
-            HorizontalDivider(color = FolioColors.Outline)
+            HorizontalDivider(color = HarbourColors.Outline)
         }
         Spacer(Modifier.height(20.dp))
         OutlinedButton(onClick = onAddFolder) {

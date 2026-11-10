@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.folio.reader"
+    namespace = "com.harbour.reader"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.folio.reader"
+        applicationId = "com.harbour.reader"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -20,7 +20,7 @@ android {
     // (otherwise each build gets a new key and Android makes you uninstall first).
     signingConfigs {
         getByName("debug") {
-            storeFile = file("folio-debug.keystore")
+            storeFile = file("harbour-debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"

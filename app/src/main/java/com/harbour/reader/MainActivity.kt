@@ -1,4 +1,4 @@
-package com.folio.reader
+package com.harbour.reader
 
 import android.app.Activity
 import android.content.Context
@@ -29,11 +29,11 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.folio.reader.ui.FolioTheme
-import com.folio.reader.ui.LibraryScreen
-import com.folio.reader.ui.LocalCovers
-import com.folio.reader.ui.ReaderScreen
-import com.folio.reader.ui.SeriesScreen
+import com.harbour.reader.ui.HarbourTheme
+import com.harbour.reader.ui.LibraryScreen
+import com.harbour.reader.ui.LocalCovers
+import com.harbour.reader.ui.ReaderScreen
+import com.harbour.reader.ui.SeriesScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,15 +43,15 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         setContent {
-            FolioTheme {
-                FolioApp()
+            HarbourTheme {
+                HarbourApp()
             }
         }
     }
 }
 
 @Composable
-fun FolioApp(vm: MainViewModel = viewModel()) {
+fun HarbourApp(vm: MainViewModel = viewModel()) {
     val context = LocalContext.current
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) vm.addRoot(uri)

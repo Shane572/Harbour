@@ -1,4 +1,4 @@
-name: Build Folio APK
+name: Build Harbour APK
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
           ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Name the APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Folio.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Harbour.apk
 
       # Each build becomes a GitHub Release, so the newest APK is always one tap away at
       # https://github.com/<owner>/<repo>/releases/latest
@@ -35,7 +35,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Folio build ${{ github.run_number }}
-          body: Download Folio.apk below and open it on your tablet to install or update.
-          files: Folio.apk
+          name: Harbour build ${{ github.run_number }}
+          body: Download Harbour.apk below and open it on your tablet to install or update.
+          files: Harbour.apk
           make_latest: true

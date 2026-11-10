@@ -1,4 +1,4 @@
-package com.folio.reader.ui
+package com.harbour.reader.ui
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
@@ -78,9 +78,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import com.folio.reader.Comic
-import com.folio.reader.ComicArchive
-import com.folio.reader.MainViewModel
+import com.harbour.reader.Comic
+import com.harbour.reader.ComicArchive
+import com.harbour.reader.MainViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -131,7 +131,7 @@ fun ReaderScreen(vm: MainViewModel, comic: Comic) {
             error != null -> ReaderError(error ?: "", onBack = vm::back)
             a == null -> CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center).size(32.dp),
-                color = FolioColors.Accent,
+                color = HarbourColors.Accent,
                 strokeWidth = 2.dp,
             )
             else -> ReaderContent(vm, comic, a)
@@ -227,7 +227,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
                 }) {
                     Text(
                         if (rtl) "Right to left" else "Left to right",
-                        color = FolioColors.Accent,
+                        color = HarbourColors.Accent,
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
@@ -256,8 +256,8 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
                     Button(
                         onClick = { vm.switchToComic(next) },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = FolioColors.Accent,
-                            contentColor = FolioColors.OnAccent,
+                            containerColor = HarbourColors.Accent,
+                            contentColor = HarbourColors.OnAccent,
                         ),
                         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
                         modifier = Modifier.widthIn(max = 420.dp),
@@ -291,8 +291,8 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
                             valueRange = 0f..(count - 1).coerceAtLeast(1).toFloat(),
                             enabled = count > 1,
                             colors = SliderDefaults.colors(
-                                thumbColor = FolioColors.Accent,
-                                activeTrackColor = FolioColors.Accent,
+                                thumbColor = HarbourColors.Accent,
+                                activeTrackColor = HarbourColors.Accent,
                                 inactiveTrackColor = Color.White.copy(alpha = 0.18f),
                             ),
                             modifier = Modifier.weight(1f),
@@ -479,7 +479,7 @@ private fun ReaderError(message: String, onBack: () -> Unit) {
         Text(message, color = Color.White, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(20.dp))
         TextButton(onClick = onBack) {
-            Text("Back to library", color = FolioColors.Accent)
+            Text("Back to library", color = HarbourColors.Accent)
         }
     }
 }

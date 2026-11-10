@@ -1,4 +1,4 @@
-package com.folio.reader.ui
+package com.harbour.reader.ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -25,8 +25,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.folio.reader.Comic
-import com.folio.reader.CoverCache
+import com.harbour.reader.Comic
+import com.harbour.reader.CoverCache
 
 val LocalCovers = staticCompositionLocalOf<CoverCache> { error("No cover cache provided") }
 
@@ -41,7 +41,7 @@ fun CoverImage(comic: Comic?, modifier: Modifier = Modifier, corner: Dp = 10.dp)
     Box(
         modifier
             .clip(RoundedCornerShape(corner))
-            .background(FolioColors.SurfaceHigh),
+            .background(HarbourColors.SurfaceHigh),
     ) {
         val bmp = bitmap
         if (bmp != null) {
@@ -56,7 +56,7 @@ fun CoverImage(comic: Comic?, modifier: Modifier = Modifier, corner: Dp = 10.dp)
                 comic.title.take(1).uppercase(),
                 modifier = Modifier.align(Alignment.Center),
                 style = MaterialTheme.typography.headlineMedium,
-                color = FolioColors.Muted.copy(alpha = 0.5f),
+                color = HarbourColors.Muted.copy(alpha = 0.5f),
             )
         }
     }
@@ -79,7 +79,7 @@ fun ProgressLine(
             Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                .background(FolioColors.Accent),
+                .background(HarbourColors.Accent),
         )
     }
 }

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Folio"
+rootProject.name = "Harbour"
 include(":app")

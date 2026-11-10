@@ -1,4 +1,4 @@
-package com.folio.reader
+package com.harbour.reader
 
 import android.app.Application
 import android.content.Context

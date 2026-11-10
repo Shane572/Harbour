@@ -1,4 +1,4 @@
-package com.folio.reader.ui
+package com.harbour.reader.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -43,9 +43,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.folio.reader.Comic
-import com.folio.reader.MainViewModel
-import com.folio.reader.Progress
+import com.harbour.reader.Comic
+import com.harbour.reader.MainViewModel
+import com.harbour.reader.Progress
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,7 +59,7 @@ fun SeriesScreen(vm: MainViewModel, path: String) {
     val nextStarted = vm.progress[next.key] != null
 
     Scaffold(
-        containerColor = FolioColors.Bg,
+        containerColor = HarbourColors.Bg,
         topBar = {
             TopAppBar(
                 title = {
@@ -68,7 +68,7 @@ fun SeriesScreen(vm: MainViewModel, path: String) {
                         Text(
                             "${series.comics.size} issues",
                             style = MaterialTheme.typography.labelSmall,
-                            color = FolioColors.Muted,
+                            color = HarbourColors.Muted,
                         )
                     }
                 },
@@ -78,10 +78,10 @@ fun SeriesScreen(vm: MainViewModel, path: String) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = FolioColors.Bg,
-                    scrolledContainerColor = FolioColors.Surface,
-                    titleContentColor = FolioColors.Text,
-                    navigationIconContentColor = FolioColors.Text,
+                    containerColor = HarbourColors.Bg,
+                    scrolledContainerColor = HarbourColors.Surface,
+                    titleContentColor = HarbourColors.Text,
+                    navigationIconContentColor = HarbourColors.Text,
                 ),
             )
         },
@@ -103,8 +103,8 @@ fun SeriesScreen(vm: MainViewModel, path: String) {
                     Button(
                         onClick = { vm.openComic(next) },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = FolioColors.Accent,
-                            contentColor = FolioColors.OnAccent,
+                            containerColor = HarbourColors.Accent,
+                            contentColor = HarbourColors.OnAccent,
                         ),
                         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp),
                     ) {
@@ -119,7 +119,7 @@ fun SeriesScreen(vm: MainViewModel, path: String) {
                     Text(
                         "Long-press an issue to mark it read or unread.",
                         style = MaterialTheme.typography.labelSmall,
-                        color = FolioColors.Muted,
+                        color = HarbourColors.Muted,
                     )
                 }
             }
@@ -169,13 +169,13 @@ private fun IssueCard(comic: Comic, progress: Progress?, onClick: () -> Unit, on
                         .padding(8.dp)
                         .size(24.dp)
                         .clip(CircleShape)
-                        .background(FolioColors.Accent),
+                        .background(HarbourColors.Accent),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         Icons.Filled.Check,
                         contentDescription = "Read",
-                        tint = FolioColors.OnAccent,
+                        tint = HarbourColors.OnAccent,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -193,7 +193,7 @@ private fun IssueCard(comic: Comic, progress: Progress?, onClick: () -> Unit, on
         Text(
             comic.title,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (progress?.finished == true) FolioColors.Muted else FolioColors.Text,
+            color = if (progress?.finished == true) HarbourColors.Muted else HarbourColors.Text,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )

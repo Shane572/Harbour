@@ -1,4 +1,4 @@
-package com.folio.reader
+package com.harbour.reader
 
 data class Comic(
     val uri: String,
