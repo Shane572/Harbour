@@ -7,6 +7,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.offset
@@ -110,8 +113,10 @@ fun ComicsSection(
     // Letting go after a hold must not also count as a tap that opens the comic.
     var suppressClick by remember { mutableStateOf(false) }
     var dragPos by remember { mutableStateOf(Offset.Zero) }
-    var preview by remember(group?.readOrder) { mutableStateOf(group?.readOrder ?: emptyList()) }
-    val orderKeys = if (dragKey != null) preview else group?.readOrder ?: emptyList()
+    // Where the dragged issue would land: a slot in the read order, or out of it.
+    var dropIndex by remember { mutableStateOf<Int?>(null) }
+    var dropRemove by remember { mutableStateOf(false) }
+    val orderKeys = group?.readOrder ?: emptyList()
     val readOrder = orderKeys.mapNotNull { vm.comicsByKey[it] }
     val inOrder = orderKeys.toSet()
     val rest = if (inOrder.isEmpty()) shown else shown.filter { it.key !in inOrder }
@@ -210,27 +215,51 @@ fun ComicsSection(
         // The gesture handler lives across recompositions, so it reads these through live references.
         val currentShown by rememberUpdatedState(shown)
         val currentGroup by rememberUpdatedState(group)
+        val haptics = LocalHapticFeedback.current
         val dragModifier = if (group != null) {
             Modifier.readOrderDrag(
                 gridState = gridState,
-                group = group,
+                groupId = group.id,
                 comicFor = { itemKey -> currentShown.firstOrNull { it.uri == itemKey.removePrefix("order:") } },
-                dragKey = { dragKey },
-                onStart = { key, p ->
+                orderKeys = { currentGroup?.readOrder ?: emptyList() },
+                onHold = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     suppressClick = true
-                    preview = currentGroup?.readOrder ?: emptyList()
+                },
+                onStart = { key, p ->
                     dragKey = key
                     dragPos = p
                 },
                 onMove = { p -> dragPos = p },
-                onPreview = { preview = it },
-                currentPreview = { preview },
+                onTarget = { index, remove ->
+                    dropIndex = index
+                    dropRemove = remove
+                },
                 onTap = { key -> vm.comicsByKey[key]?.let(::toggle) },
-                onEnd = { committed ->
+                onDrop = { key, index, remove ->
                     val g = currentGroup
-                    if (committed && g != null) vm.setReadOrder(g.id, preview)
+                    if (g != null && (remove || index != null)) {
+                        val order = g.readOrder.toMutableList()
+                        val from = order.indexOf(key)
+                        if (remove) {
+                            order.remove(key)
+                        } else if (index != null) {
+                            var to = index
+                            if (from >= 0) {
+                                order.removeAt(from)
+                                if (from < to) to--
+                            }
+                            order.add(to.coerceIn(0, order.size), key)
+                        }
+                        vm.setReadOrder(g.id, order)
+                    }
+                },
+                onFinish = { moved ->
                     dragKey = null
-                    suppressClick = false
+                    dropIndex = null
+                    dropRemove = false
+                    // After a plain hold the comic's own tap clears this; after a drag there is no tap.
+                    if (moved) suppressClick = false
                 },
             )
         } else {
@@ -260,12 +289,16 @@ fun ComicsSection(
                             .fillMaxWidth()
                             .aspectRatio(2f / 3f)
                             .clip(RoundedCornerShape(10.dp))
-                            .border(2.dp, HarbourColors.Accent, RoundedCornerShape(10.dp)),
+                            .border(
+                                if (dropIndex == 0) 3.dp else 2.dp,
+                                if (dropIndex == 0) HarbourColors.Accent else HarbourColors.Accent.copy(alpha = 0.5f),
+                                RoundedCornerShape(10.dp),
+                            ),
                     ) {
                         Text("Drop here", color = HarbourColors.Accent, style = MaterialTheme.typography.labelLarge)
                     }
                 }
-                item(span = { GridItemSpan(maxLineSpan) }, key = "rest-label") { SectionLabel("All issues") }
+                item(span = { GridItemSpan(maxLineSpan) }, key = "rest-label") { RestLabel(false) }
             }
             if (readOrder.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "order-label") {
@@ -277,8 +310,15 @@ fun ComicsSection(
                     }
                 }
                 itemsIndexed(readOrder, key = { _, c -> "order:" + c.uri }) { i, comic ->
+                    val marker = when {
+                        dropIndex == i -> -1
+                        dropIndex == readOrder.size && i == readOrder.lastIndex -> 1
+                        else -> 0
+                    }
                     ComicCard(
-                        modifier = Modifier.animateItem().alpha(if (comic.key == dragKey) 0.3f else 1f),
+                        modifier = Modifier
+                            .dropMarker(marker, HarbourColors.Accent)
+                            .alpha(if (comic.key == dragKey) 0.35f else 1f),
                         comic = comic,
                         progress = vm.progress[comic.key],
                         subtitle = null,
@@ -296,8 +336,8 @@ fun ComicsSection(
                         onLongClick = null, // held and dragged (or just held) by the grid instead
                     )
                 }
-                if (rest.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "rest-label") { SectionLabel("All issues") }
+                if (rest.isNotEmpty() || dropRemove) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "rest-label") { RestLabel(dropRemove) }
                 }
             }
 
@@ -325,7 +365,7 @@ fun ComicsSection(
 
             items(rest, key = { it.uri }) { comic ->
                 ComicCard(
-                    modifier = Modifier.animateItem().alpha(if (comic.key == dragKey) 0.3f else 1f),
+                    modifier = Modifier.alpha(if (comic.key == dragKey) 0.35f else 1f),
                     comic = comic,
                     progress = vm.progress[comic.key],
                     subtitle = if (group == null) vm.groupOfKey[comic.key]?.name else null,
@@ -659,27 +699,55 @@ private fun ComicCard(
     }
 }
 
+/** The "All issues" heading; while you drag a read-order issue over it, it says it'll be removed. */
+@Composable
+private fun RestLabel(dropping: Boolean) {
+    if (dropping) {
+        Text(
+            "DROP TO REMOVE FROM READ ORDER",
+            style = MaterialTheme.typography.labelMedium,
+            color = HarbourColors.Accent,
+        )
+    } else {
+        SectionLabel("All issues")
+    }
+}
+
+/** An accent bar just outside a card's left (-1) or right (1) edge, marking where a drop will land. */
+private fun Modifier.dropMarker(side: Int, color: Color): Modifier = if (side == 0) this else drawWithContent {
+    drawContent()
+    val w = 4.dp.toPx()
+    val gap = 9.dp.toPx() // half the 18dp gap between covers
+    val x = if (side < 0) -gap - w / 2 else size.width + gap - w / 2
+    drawRoundRect(color, topLeft = Offset(x, 0f), size = Size(w, size.width * 1.5f), cornerRadius = CornerRadius(w / 2))
+}
+
 /**
- * Hold-and-drag on a group page. Holding an issue without moving selects it (as elsewhere);
- * dragging moves it within the read order, into it (drop on the read order) or out of it
- * (drop on All issues). The grid scrolls when you drag near its top or bottom edge.
+ * Hold-and-drag on a group page. Holding still selects the issue (as elsewhere). Once you move,
+ * the grid stays put and [onTarget] reports where the issue would land: a slot in the read order
+ * (left or right of the issue under your finger), or out of it (over All issues). [onDrop] applies
+ * it when you let go. The grid scrolls when you drag near its top or bottom edge.
  */
 private fun Modifier.readOrderDrag(
     gridState: LazyGridState,
-    group: Group,
+    groupId: String,
     comicFor: (itemKey: String) -> Comic?,
-    dragKey: () -> String?,
+    orderKeys: () -> List<String>,
+    onHold: () -> Unit,
     onStart: (key: String, at: Offset) -> Unit,
     onMove: (Offset) -> Unit,
-    onPreview: (List<String>) -> Unit,
-    currentPreview: () -> List<String>,
+    onTarget: (index: Int?, remove: Boolean) -> Unit,
     onTap: (key: String) -> Unit,
-    onEnd: (committed: Boolean) -> Unit,
-): Modifier = pointerInput(group.id) {
+    onDrop: (key: String, index: Int?, remove: Boolean) -> Unit,
+    onFinish: (moved: Boolean) -> Unit,
+): Modifier = pointerInput(groupId) {
     coroutineScope {
+        var candidate: String? = null
         var pos = Offset.Zero
         var start = Offset.Zero
         var moved = false
+        var index: Int? = null
+        var remove = false
         var scroller: Job? = null
 
         fun itemAt(p: Offset) = gridState.layoutInfo.visibleItemsInfo.firstOrNull {
@@ -687,78 +755,88 @@ private fun Modifier.readOrderDrag(
                 p.y >= it.offset.y && p.y < it.offset.y + it.size.height
         }
 
-        fun updateHover() {
-            val k = dragKey() ?: return
-            val target = itemAt(pos)?.key as? String ?: return
-            val order = currentPreview().toMutableList()
+        // In the gaps between covers nothing is hit, so the last target simply stays.
+        fun updateTarget() {
+            val k = candidate ?: return
+            val hit = itemAt(pos) ?: return
+            val key = hit.key as? String ?: return
+            val order = orderKeys()
             val from = order.indexOf(k)
+            var newIndex: Int? = null
+            var newRemove = false
             when {
-                target.startsWith("order:") -> {
-                    val other = comicFor(target)?.key ?: return
-                    if (other == k) return
-                    val to = order.indexOf(other)
-                    if (to < 0) return
-                    if (from >= 0) order.removeAt(from)
-                    order.add(to, k)
+                key.startsWith("order:") -> {
+                    val j = order.indexOf(comicFor(key)?.key ?: return)
+                    if (j < 0) return
+                    newIndex = if (pos.x > hit.offset.x + hit.size.width / 2f) j + 1 else j
                 }
-                target == "order-label" || target == "order-drop" -> {
-                    if (from == 0) return
-                    if (from >= 0) order.removeAt(from)
-                    order.add(0, k)
-                }
-                target == "rest-label" || comicFor(target) != null -> {
-                    if (from < 0) return
-                    order.removeAt(from)
-                }
+                key == "order-label" || key == "order-drop" -> newIndex = 0
+                key == "rest-label" || comicFor(key) != null -> newRemove = from >= 0
                 else -> return
             }
-            onPreview(order)
+            // Dropping an issue right where it already is changes nothing, so show nothing.
+            if (newIndex != null && from >= 0 && (newIndex == from || newIndex == from + 1)) newIndex = null
+            if (newIndex != index || newRemove != remove) {
+                index = newIndex
+                remove = newRemove
+                onTarget(index, remove)
+            }
         }
 
         detectDragGesturesAfterLongPress(
             onDragStart = { p ->
                 val key = itemAt(p)?.key as? String
-                val comic = key?.let(comicFor) ?: return@detectDragGesturesAfterLongPress
+                candidate = key?.let(comicFor)?.key
+                if (candidate == null) return@detectDragGesturesAfterLongPress
                 pos = p
                 start = p
                 moved = false
-                onStart(comic.key, p)
-                scroller = launch {
-                    val edge = 96.dp.toPx()
-                    while (isActive) {
-                        val h = size.height
-                        val speed = when {
-                            pos.y < edge -> -(edge - pos.y) / 3f
-                            pos.y > h - edge -> (pos.y - (h - edge)) / 3f
-                            else -> 0f
-                        }
-                        if (moved && speed != 0f) {
-                            gridState.scrollBy(speed)
-                            updateHover()
-                        }
-                        delay(16)
-                    }
-                }
+                index = null
+                remove = false
+                onHold()
             },
             onDrag = { change, amount ->
-                if (dragKey() == null) return@detectDragGesturesAfterLongPress
+                val k = candidate ?: return@detectDragGesturesAfterLongPress
                 change.consume()
                 pos += amount
-                onMove(pos)
-                if (!moved && (pos - start).getDistance() > viewConfiguration.touchSlop) moved = true
-                if (moved) updateHover()
+                if (!moved && (pos - start).getDistance() > viewConfiguration.touchSlop) {
+                    moved = true
+                    onStart(k, pos)
+                    scroller = launch {
+                        val edge = 96.dp.toPx()
+                        while (isActive) {
+                            val h = size.height
+                            val speed = when {
+                                pos.y < edge -> -(edge - pos.y) / 3f
+                                pos.y > h - edge -> (pos.y - (h - edge)) / 3f
+                                else -> 0f
+                            }
+                            if (speed != 0f) {
+                                gridState.scrollBy(speed)
+                                updateTarget()
+                            }
+                            delay(16)
+                        }
+                    }
+                }
+                if (moved) {
+                    onMove(pos)
+                    updateTarget()
+                }
             },
             onDragEnd = {
                 scroller?.cancel()
-                val k = dragKey()
+                val k = candidate
                 if (k != null) {
-                    if (!moved) onTap(k)
-                    onEnd(moved)
+                    if (moved) onDrop(k, index, remove) else onTap(k)
+                    onFinish(moved)
                 }
+                candidate = null
             },
             onDragCancel = {
                 scroller?.cancel()
-                if (dragKey() != null) onEnd(false)
+                if (candidate != null) onFinish(moved)
+                candidate = null
             },
         )
     }
