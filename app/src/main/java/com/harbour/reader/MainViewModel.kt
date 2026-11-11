@@ -477,10 +477,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * "green lantern 48" finds issue 48 in the Green Lantern group. Numbers match whole numbers
      * ("48" matches "#048" but not "148"); "#" is ignored.
      */
+    /** Search covers the page you're on: a group, Will Read, Ungrouped, All comics or Books. Home and Settings search everything. */
+    val searchScopeName: String?
+        get() = when (val s = section) {
+            is Section.InGroup -> groupById(s.id)?.name
+            Section.WillRead -> "Will Read"
+            Section.Ungrouped -> "Ungrouped"
+            Section.AllComics -> "All comics"
+            Section.Books -> "Books"
+            Section.Home, Section.Settings -> null
+        }
+
+    private fun comicsInScope(): List<Comic> = when (val s = section) {
+        is Section.InGroup -> groupById(s.id)?.let(::comicsIn) ?: comics
+        Section.WillRead -> willRead
+        Section.Ungrouped -> ungrouped
+        Section.Books -> emptyList()
+        Section.Home, Section.Settings, Section.AllComics -> comics
+    }
+
+    private fun booksInScope(): List<Book> = when (section) {
+        Section.Books, Section.Home, Section.Settings -> books
+        else -> emptyList()
+    }
+
     fun searchComics(q: String): List<Comic> {
         val terms = searchTerms(q)
         if (terms.isEmpty()) return emptyList()
-        return comics
+        return comicsInScope()
             .filter { c -> matches(terms, "${groupOfKey[c.key]?.name ?: ""} ${c.title} ${c.name}") }
             .sortedWith(
                 compareBy<Comic> { groupOfKey[it.key] == null }
@@ -492,7 +516,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun searchBooks(q: String): List<Book> {
         val terms = searchTerms(q)
         if (terms.isEmpty()) return emptyList()
-        return books.filter { b -> matches(terms, "${b.title} ${b.author} ${b.name}") }
+        return booksInScope().filter { b -> matches(terms, "${b.title} ${b.author} ${b.name}") }
             .sortedWith(compareBy(NaturalOrder) { it.title })
     }
 

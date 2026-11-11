@@ -433,7 +433,7 @@ private fun SearchBar(vm: MainViewModel) {
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (vm.searchQuery.isEmpty()) {
                             Text(
-                                "Search, e.g. Green Lantern 48",
+                                "Search",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = HarbourColors.Muted,
                                 maxLines = 1,
@@ -468,11 +468,13 @@ private fun SearchBar(vm: MainViewModel) {
 @Composable
 private fun SearchResults(vm: MainViewModel) {
     val q = vm.searchQuery
-    val comics = remember(q, vm.comics, vm.groups) { vm.searchComics(q) }
-    val books = remember(q, vm.books) { vm.searchBooks(q) }
+    val section = vm.section
+    val comics = remember(q, section, vm.comics, vm.groups) { vm.searchComics(q) }
+    val books = remember(q, section, vm.books) { vm.searchBooks(q) }
+    val scope = vm.searchScopeName
     ComicsSection(
         vm = vm,
-        title = "Results",
+        title = if (scope != null) "Results in $scope" else "Results",
         comics = comics,
         group = null,
         subtitle = buildString {
@@ -481,7 +483,10 @@ private fun SearchResults(vm: MainViewModel) {
         },
         presorted = true,
         emptyHint = if (books.isEmpty()) {
-            "No matches" to "Try fewer words, or just the group name and issue number, like \"lantern 48\"."
+            "No matches" to (
+                if (scope != null) "Nothing in $scope matches. Search from Home to look through everything."
+                else "Try fewer words, or just a name and issue number."
+            )
         } else {
             null
         },
