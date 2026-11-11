@@ -7,6 +7,24 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -32,6 +50,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -85,8 +104,16 @@ fun ComicsSection(
     var confirmDelete by remember { mutableStateOf(false) }
     val selecting = selected.isNotEmpty()
     val shown = remember(comics, vm.sort, presorted) { if (presorted) comics else vm.sorted(comics) }
-    val readOrder = remember(group, vm.comics) { group?.let(vm::readOrderOf) ?: emptyList() }
-    val inOrder = group?.readOrder?.toSet() ?: emptySet()
+    // Dragging on a group page: hold an issue, then drag it within, into or out of the read order.
+    val gridState = rememberLazyGridState()
+    var dragKey by remember { mutableStateOf<String?>(null) }
+    // Letting go after a hold must not also count as a tap that opens the comic.
+    var suppressClick by remember { mutableStateOf(false) }
+    var dragPos by remember { mutableStateOf(Offset.Zero) }
+    var preview by remember(group?.readOrder) { mutableStateOf(group?.readOrder ?: emptyList()) }
+    val orderKeys = if (dragKey != null) preview else group?.readOrder ?: emptyList()
+    val readOrder = orderKeys.mapNotNull { vm.comicsByKey[it] }
+    val inOrder = orderKeys.toSet()
     val rest = if (inOrder.isEmpty()) shown else shown.filter { it.key !in inOrder }
     val upNext = group?.let(vm::upNext)
 
@@ -110,11 +137,6 @@ fun ComicsSection(
                     vm.removeFromReadOrder(group.id, selected)
                     done()
                 })
-            }
-            val only = selected.singleOrNull()
-            if (only != null && only in inOrder) {
-                add("Move earlier in read order" to { vm.moveInReadOrder(group.id, only, -1) })
-                add("Move later in read order" to { vm.moveInReadOrder(group.id, only, 1) })
             }
         }
         if (selected.any { !vm.isWillRead(it) }) {
@@ -185,7 +207,39 @@ fun ComicsSection(
             }
         }
 
+        // The gesture handler lives across recompositions, so it reads these through live references.
+        val currentShown by rememberUpdatedState(shown)
+        val currentGroup by rememberUpdatedState(group)
+        val dragModifier = if (group != null) {
+            Modifier.readOrderDrag(
+                gridState = gridState,
+                group = group,
+                comicFor = { itemKey -> currentShown.firstOrNull { it.uri == itemKey.removePrefix("order:") } },
+                dragKey = { dragKey },
+                onStart = { key, p ->
+                    suppressClick = true
+                    preview = currentGroup?.readOrder ?: emptyList()
+                    dragKey = key
+                    dragPos = p
+                },
+                onMove = { p -> dragPos = p },
+                onPreview = { preview = it },
+                currentPreview = { preview },
+                onTap = { key -> vm.comicsByKey[key]?.let(::toggle) },
+                onEnd = { committed ->
+                    val g = currentGroup
+                    if (committed && g != null) vm.setReadOrder(g.id, preview)
+                    dragKey = null
+                    suppressClick = false
+                },
+            )
+        } else {
+            Modifier
+        }
+
+        Box(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
+            state = gridState,
             columns = GridCells.Adaptive(minSize = vm.coverSize.minCell()),
             contentPadding = PaddingValues(
                 start = 28.dp,
@@ -195,8 +249,24 @@ fun ComicsSection(
             ),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().then(dragModifier),
         ) {
+            if (group != null && readOrder.isEmpty() && dragKey != null) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "order-label") { SectionLabel("Read order") }
+                item(key = "order-drop") {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(2f / 3f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(2.dp, HarbourColors.Accent, RoundedCornerShape(10.dp)),
+                    ) {
+                        Text("Drop here", color = HarbourColors.Accent, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+                item(span = { GridItemSpan(maxLineSpan) }, key = "rest-label") { SectionLabel("All issues") }
+            }
             if (readOrder.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "order-label") {
                     val read = readOrder.count { vm.progress[it.key]?.finished == true }
@@ -208,6 +278,7 @@ fun ComicsSection(
                 }
                 itemsIndexed(readOrder, key = { _, c -> "order:" + c.uri }) { i, comic ->
                     ComicCard(
+                        modifier = Modifier.animateItem().alpha(if (comic.key == dragKey) 0.3f else 1f),
                         comic = comic,
                         progress = vm.progress[comic.key],
                         subtitle = null,
@@ -215,8 +286,14 @@ fun ComicsSection(
                         selecting = selecting,
                         badge = i + 1,
                         badgeHighlighted = comic.key == upNext?.key,
-                        onClick = { if (selecting) toggle(comic) else vm.openComic(comic) },
-                        onLongClick = { toggle(comic) },
+                        onClick = {
+                        when {
+                            suppressClick -> suppressClick = false
+                            selecting -> toggle(comic)
+                            else -> vm.openComic(comic)
+                        }
+                    },
+                        onLongClick = null, // held and dragged (or just held) by the grid instead
                     )
                 }
                 if (rest.isNotEmpty()) {
@@ -248,15 +325,41 @@ fun ComicsSection(
 
             items(rest, key = { it.uri }) { comic ->
                 ComicCard(
+                    modifier = Modifier.animateItem().alpha(if (comic.key == dragKey) 0.3f else 1f),
                     comic = comic,
                     progress = vm.progress[comic.key],
                     subtitle = if (group == null) vm.groupOfKey[comic.key]?.name else null,
                     selected = comic.key in selected,
                     selecting = selecting,
-                    onClick = { if (selecting) toggle(comic) else vm.openComic(comic) },
-                    onLongClick = { toggle(comic) },
+                    onClick = {
+                        when {
+                            suppressClick -> suppressClick = false
+                            selecting -> toggle(comic)
+                            else -> vm.openComic(comic)
+                        }
+                    },
+                    onLongClick = if (group != null) null else ({ toggle(comic) }),
                 )
             }
+        }
+
+        // The issue being dragged follows your finger.
+        val dragging = dragKey?.let { vm.comicsByKey[it] }
+        if (dragging != null) {
+            val density = LocalDensity.current
+            val w = with(density) { 96.dp.toPx() }
+            val h = w * 1.5f
+            CoverImage(
+                dragging,
+                Modifier
+                    .offset { IntOffset((dragPos.x - w / 2).roundToInt(), (dragPos.y - h / 2).roundToInt()) }
+                    .size(96.dp, 144.dp)
+                    .graphicsLayer {
+                        shadowElevation = 24f
+                        alpha = 0.95f
+                    },
+            )
+        }
         }
     }
 
@@ -304,6 +407,11 @@ private fun SectionHeader(vm: MainViewModel, title: String, subtitle: String, gr
     var deleting by remember { mutableStateOf(false) }
 
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        if (group != null) {
+            IconButton(onClick = vm::back, modifier = Modifier.padding(end = 4.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = HarbourColors.Text)
+            }
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 title,
@@ -433,25 +541,28 @@ private fun SelectionBar(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ComicCard(
+    modifier: Modifier = Modifier,
     comic: Comic,
     progress: Progress?,
     subtitle: String?,
     selected: Boolean,
     selecting: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
     badge: Int? = null,
     badgeHighlighted: Boolean = false,
 ) {
     val haptics = LocalHapticFeedback.current
     Column(
-        Modifier
+        modifier
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onLongClick()
+                onLongClick = onLongClick?.let { longClick ->
+                    {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        longClick()
+                    }
                 },
             ),
     ) {
@@ -545,5 +656,110 @@ private fun ComicCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+/**
+ * Hold-and-drag on a group page. Holding an issue without moving selects it (as elsewhere);
+ * dragging moves it within the read order, into it (drop on the read order) or out of it
+ * (drop on All issues). The grid scrolls when you drag near its top or bottom edge.
+ */
+private fun Modifier.readOrderDrag(
+    gridState: LazyGridState,
+    group: Group,
+    comicFor: (itemKey: String) -> Comic?,
+    dragKey: () -> String?,
+    onStart: (key: String, at: Offset) -> Unit,
+    onMove: (Offset) -> Unit,
+    onPreview: (List<String>) -> Unit,
+    currentPreview: () -> List<String>,
+    onTap: (key: String) -> Unit,
+    onEnd: (committed: Boolean) -> Unit,
+): Modifier = pointerInput(group.id) {
+    coroutineScope {
+        var pos = Offset.Zero
+        var start = Offset.Zero
+        var moved = false
+        var scroller: Job? = null
+
+        fun itemAt(p: Offset) = gridState.layoutInfo.visibleItemsInfo.firstOrNull {
+            p.x >= it.offset.x && p.x < it.offset.x + it.size.width &&
+                p.y >= it.offset.y && p.y < it.offset.y + it.size.height
+        }
+
+        fun updateHover() {
+            val k = dragKey() ?: return
+            val target = itemAt(pos)?.key as? String ?: return
+            val order = currentPreview().toMutableList()
+            val from = order.indexOf(k)
+            when {
+                target.startsWith("order:") -> {
+                    val other = comicFor(target)?.key ?: return
+                    if (other == k) return
+                    val to = order.indexOf(other)
+                    if (to < 0) return
+                    if (from >= 0) order.removeAt(from)
+                    order.add(to, k)
+                }
+                target == "order-label" || target == "order-drop" -> {
+                    if (from == 0) return
+                    if (from >= 0) order.removeAt(from)
+                    order.add(0, k)
+                }
+                target == "rest-label" || comicFor(target) != null -> {
+                    if (from < 0) return
+                    order.removeAt(from)
+                }
+                else -> return
+            }
+            onPreview(order)
+        }
+
+        detectDragGesturesAfterLongPress(
+            onDragStart = { p ->
+                val key = itemAt(p)?.key as? String
+                val comic = key?.let(comicFor) ?: return@detectDragGesturesAfterLongPress
+                pos = p
+                start = p
+                moved = false
+                onStart(comic.key, p)
+                scroller = launch {
+                    val edge = 96.dp.toPx()
+                    while (isActive) {
+                        val h = size.height
+                        val speed = when {
+                            pos.y < edge -> -(edge - pos.y) / 3f
+                            pos.y > h - edge -> (pos.y - (h - edge)) / 3f
+                            else -> 0f
+                        }
+                        if (moved && speed != 0f) {
+                            gridState.scrollBy(speed)
+                            updateHover()
+                        }
+                        delay(16)
+                    }
+                }
+            },
+            onDrag = { change, amount ->
+                if (dragKey() == null) return@detectDragGesturesAfterLongPress
+                change.consume()
+                pos += amount
+                onMove(pos)
+                if (!moved && (pos - start).getDistance() > viewConfiguration.touchSlop) moved = true
+                if (moved) updateHover()
+            },
+            onDragEnd = {
+                scroller?.cancel()
+                val k = dragKey()
+                if (k != null) {
+                    if (!moved) onTap(k)
+                    onEnd(moved)
+                }
+            },
+            onDragCancel = {
+                scroller?.cancel()
+                if (dragKey() != null) onEnd(false)
+            },
+        )
     }
 }

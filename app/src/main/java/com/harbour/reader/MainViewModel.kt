@@ -368,6 +368,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Replaces a group's read order (from dragging on the group page). */
+    fun setReadOrder(groupId: String, keys: List<String>) {
+        updateGroup(groupId) { g -> g.copy(readOrder = keys.filter { it in g.keys }.distinct()) }
+    }
+
     fun removeFromReadOrder(groupId: String, keys: Collection<String>) {
         val leaving = keys.toSet()
         updateGroup(groupId) { g -> g.copy(readOrder = g.readOrder.filterNot { it in leaving }) }
@@ -563,7 +568,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // Navigation
 
+    // Pages you've been to, so Back (and the back arrow) steps back one at a time.
+    private val sectionHistory = mutableStateListOf<Section>()
+
     fun show(s: Section) {
+        if (s == section) return
+        sectionHistory.add(section)
+        if (sectionHistory.size > 30) sectionHistory.removeAt(0)
         section = s
     }
 
@@ -571,7 +582,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         when {
             backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
             searchQuery.isNotEmpty() -> searchQuery = ""
-            section != Section.Home -> section = Section.Home
+            section != Section.Home -> section = sectionHistory.removeLastOrNull() ?: Section.Home
         }
     }
 
