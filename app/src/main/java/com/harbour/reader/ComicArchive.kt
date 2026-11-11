@@ -233,6 +233,9 @@ private class RarComic(private val pages: List<File>) : ComicArchive() {
             ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
                 val archive = Archive.readNew()
                 try {
+                    // Android's native code has no locale, so libarchive would try to turn file names
+                    // into plain ASCII and fail on anything else (e.g. RARs with UTF-16 names).
+                    Archive.setCharset(archive, "UTF-8".toByteArray())
                     Archive.readSupportFilterAll(archive)
                     Archive.readSupportFormatAll(archive)
                     Archive.readOpenFd(archive, pfd.fd, 64 * 1024)
@@ -249,7 +252,7 @@ private class RarComic(private val pages: List<File>) : ComicArchive() {
                         if (entry == 0L) break
                         if (ArchiveEntry.filetype(entry) != ArchiveEntry.AE_IFREG) continue
                         val name = ArchiveEntry.pathnameUtf8(entry)
-                            ?: ArchiveEntry.pathname(entry)?.let { String(it, Charsets.ISO_8859_1) }
+                            ?: ArchiveEntry.pathname(entry)?.let { String(it, Charsets.UTF_8) }
                             ?: continue
                         if (!onEntry(name, archive)) break
                     }

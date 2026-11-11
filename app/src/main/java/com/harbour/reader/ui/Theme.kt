@@ -22,6 +22,8 @@ val AccentChoices = listOf(
     AccentChoice("Sky", Color(0xFF6FB2FF), Color(0xFF06182E)),
     AccentChoice("Teal", Color(0xFF4FC9B8), Color(0xFF032420)),
     AccentChoice("Lime", Color(0xFFB2DB6E), Color(0xFF16220A)),
+    // Dark enough that text on it needs to be light rather than dark.
+    AccentChoice("Crimson", Color(0xFFC4313B), Color(0xFFFFF1F0)),
 )
 
 /**
