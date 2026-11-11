@@ -222,11 +222,14 @@ fun ComicsSection(
                 groupId = group.id,
                 comicFor = { itemKey -> currentShown.firstOrNull { it.uri == itemKey.removePrefix("order:") } },
                 orderKeys = { currentGroup?.readOrder ?: emptyList() },
-                onHold = {
+                // Holding selects straight away (like everywhere else); if you then drag, that's undone.
+                onHold = { key ->
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     suppressClick = true
+                    vm.comicsByKey[key]?.let(::toggle)
                 },
                 onStart = { key, p ->
+                    vm.comicsByKey[key]?.let(::toggle)
                     dragKey = key
                     dragPos = p
                 },
@@ -235,7 +238,6 @@ fun ComicsSection(
                     dropIndex = index
                     dropRemove = remove
                 },
-                onTap = { key -> vm.comicsByKey[key]?.let(::toggle) },
                 onDrop = { key, index, remove ->
                     val g = currentGroup
                     if (g != null && (remove || index != null)) {
@@ -723,7 +725,7 @@ private fun Modifier.dropMarker(side: Int, color: Color): Modifier = if (side ==
 }
 
 /**
- * Hold-and-drag on a group page. Holding still selects the issue (as elsewhere). Once you move,
+ * Hold-and-drag on a group page. Holding selects the issue at once (as elsewhere). Once you move,
  * the grid stays put and [onTarget] reports where the issue would land: a slot in the read order
  * (left or right of the issue under your finger), or out of it (over All issues). [onDrop] applies
  * it when you let go. The grid scrolls when you drag near its top or bottom edge.
@@ -733,11 +735,10 @@ private fun Modifier.readOrderDrag(
     groupId: String,
     comicFor: (itemKey: String) -> Comic?,
     orderKeys: () -> List<String>,
-    onHold: () -> Unit,
+    onHold: (key: String) -> Unit,
     onStart: (key: String, at: Offset) -> Unit,
     onMove: (Offset) -> Unit,
     onTarget: (index: Int?, remove: Boolean) -> Unit,
-    onTap: (key: String) -> Unit,
     onDrop: (key: String, index: Int?, remove: Boolean) -> Unit,
     onFinish: (moved: Boolean) -> Unit,
 ): Modifier = pointerInput(groupId) {
@@ -793,13 +794,14 @@ private fun Modifier.readOrderDrag(
                 moved = false
                 index = null
                 remove = false
-                onHold()
+                onHold(candidate!!)
             },
             onDrag = { change, amount ->
                 val k = candidate ?: return@detectDragGesturesAfterLongPress
                 change.consume()
                 pos += amount
-                if (!moved && (pos - start).getDistance() > viewConfiguration.touchSlop) {
+                // A deliberate move (not a wobble while holding) turns the hold into a drag.
+                if (!moved && (pos - start).getDistance() > 24.dp.toPx()) {
                     moved = true
                     onStart(k, pos)
                     scroller = launch {
@@ -828,7 +830,7 @@ private fun Modifier.readOrderDrag(
                 scroller?.cancel()
                 val k = candidate
                 if (k != null) {
-                    if (moved) onDrop(k, index, remove) else onTap(k)
+                    if (moved) onDrop(k, index, remove)
                     onFinish(moved)
                 }
                 candidate = null
