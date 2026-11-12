@@ -1,9 +1,6 @@
 package com.harbour.reader
 
 import android.graphics.Bitmap
-import android.graphics.Rect
-import android.graphics.RectF
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
 /**
@@ -26,26 +23,6 @@ class ShownPages private constructor(
     /** The first shown page for one of the file's pages. */
     fun indexOf(sourcePage: Int): Int = parts.indexOfFirst { it.page >= sourcePage }.let { if (it < 0) parts.lastIndex else it }
 
-    // Which part of the file's page each shown page actually shows (0..1), once it's been drawn.
-    private val crops = ConcurrentHashMap<Int, RectF>()
-
-    private fun halfOf(part: Part): RectF = when (part.half) {
-        LEFT -> RectF(0f, 0f, 0.5f, 1f)
-        RIGHT -> RectF(0.5f, 0f, 1f, 1f)
-        else -> RectF(0f, 0f, 1f, 1f)
-    }
-
-    /** The part of the file's page that shown page [index] shows, as 0..1 of the file's page. */
-    fun cropOf(index: Int): RectF = crops[index] ?: halfOf(parts[index.coerceIn(0, parts.lastIndex)])
-
-    /** The shown page for a spot on one of the file's pages (which half, when spreads are split). */
-    fun indexFor(sourcePage: Int, x: Float?): Int {
-        val first = indexOf(sourcePage)
-        val second = first + 1
-        if (x == null || second > parts.lastIndex || parts[second].page != sourcePage) return first
-        return if (halfOf(parts[first]).let { x >= it.left && x <= it.right }) first else second
-    }
-
     override fun decodePage(index: Int, maxPixels: Long, config: Bitmap.Config): Bitmap? {
         val part = parts[index]
         val whole = source.decodePage(part.page, maxPixels, config) ?: return null
@@ -54,19 +31,7 @@ class ShownPages private constructor(
             RIGHT -> Bitmap.createBitmap(whole, whole.width / 2, 0, whole.width - whole.width / 2, whole.height)
             else -> whole
         }
-        val half = halfOf(part)
-        val kept = if (trim) Trim.bounds(cut) else null
-        if (kept == null) {
-            crops[index] = half
-            return cut
-        }
-        crops[index] = RectF(
-            half.left + half.width() * kept.left / cut.width,
-            half.top + half.height() * kept.top / cut.height,
-            half.left + half.width() * kept.right / cut.width,
-            half.top + half.height() * kept.bottom / cut.height,
-        )
-        return Bitmap.createBitmap(cut, kept.left, kept.top, kept.width(), kept.height())
+        return if (trim) Trim.margins(cut) else cut
     }
 
     override fun pageSize(index: Int): IntArray? = null
@@ -105,15 +70,9 @@ class ShownPages private constructor(
 /** Cuts away plain white or black borders around a page, keeping a hair of margin. */
 object Trim {
     fun margins(b: Bitmap): Bitmap {
-        val r = bounds(b) ?: return b
-        return Bitmap.createBitmap(b, r.left, r.top, r.width(), r.height())
-    }
-
-    /** The part of the page to keep, or null if there's nothing worth trimming. */
-    fun bounds(b: Bitmap): Rect? {
         val w = b.width
         val h = b.height
-        if (w < 64 || h < 64) return null
+        if (w < 64 || h < 64) return b
         val buf = IntArray(maxOf(w, h))
 
         fun row(y: Int): Int {
@@ -174,14 +133,14 @@ object Trim {
         val bottom = scan(h / 4) { row(h - 1 - it) }
         val left = scan(w / 4) { col(it) }
         val right = scan(w / 4) { col(w - 1 - it) }
-        if (left + right < w / 50 && top + bottom < h / 50) return null
+        if (left + right < w / 50 && top + bottom < h / 50) return b
 
         val keep = minOf(w, h) / 100
         val l = (left - keep).coerceAtLeast(0)
         val t = (top - keep).coerceAtLeast(0)
         val r = (w - right + keep).coerceAtMost(w)
         val btm = (h - bottom + keep).coerceAtMost(h)
-        if (r - l < w / 2 || btm - t < h / 2) return null
-        return Rect(l, t, r, btm)
+        if (r - l < w / 2 || btm - t < h / 2) return b
+        return Bitmap.createBitmap(b, l, t, r - l, btm - t)
     }
 }

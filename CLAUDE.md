@@ -50,11 +50,6 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
 - `ComicInfo.kt` — ComicInfo.xml inside CBZ/CBR (series, credits, summary) for About this issue
 - `ShownPages.kt` — the reader's view of a comic: trimmed margins (`Trim`), split spreads; maps
   shown pages back to the file's pages, which progress and saved pages always use
-- `Voices.kt` — read-aloud voice packs (Quick = Piper libritts_r int8, Natural = Kokoro int8), download +
-  unpack (libarchive) into filesDir/voices, `VoiceEngine` (sherpa-onnx AAR in `app/libs`), `SpeechPlayer`
-- `Bubbles.kt` — ML Kit text recognition (bundled, offline), panel XY-cut on gutters, caption vs balloon
-  by square corners / coloured fill, lettering clean-up (`Lettering`)
-- `ReadAloud.kt` — the reading session: OCR next page ahead, voice next line ahead, turns pages
 - `GalleryStore.kt` — saved pages: JPEGs + `gallery.json` in `Harbour/Gallery` (outlive the app)
 - `CoverCache.kt`, `ProgressStore.kt` (comics + books), `Updater.kt`, `StorageAccess.kt`, `HarbourApp.kt`
 - `ui/` — `LibraryScreen` (main layout, Home, welcome), `Sidebar`, `ComicsSection` (grids,
@@ -62,7 +57,7 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme,
   `GallerySection` (Gallery page + full-screen `GalleryViewer`), `ComicInfoDialog`
 
-## Current state (build 31)
+## Current state (build 30)
 
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, Gallery, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`). Groups are made by hand
@@ -104,18 +99,12 @@ Trim margins and Split spreads are global on/off icons in the reader top bar, li
 (`trimMargins`, `splitSpreads`). Spread detection reads every page's size once per comic
 (`spreadsOf`, cached); the cover is never split; RTL shows the right half first.
 
-Read aloud (comics): speech-bubble button in the reader top bar; bar at the bottom with previous / pause /
-next line, the line being read, its voice (Narrator / Female / Male, remembered per bubble in prefs
-`bubble_voices`) and stop. The bubble being read is outlined (`bubbleHighlight`, mapped through
-`ShownPages.cropOf`). Turning pages by hand restarts it there. Settings → Read aloud: pack choice,
-download, voice per role with samples, bubbles default voice, speed. Measured on Shane's PC Kokoro is ~6x
-slower than Piper, so Quick is the default; Piper voices were picked by pitch (deep men / women).
-If read aloud has to go, build 30 is commit d69a6f2.
-
 Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
 (Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books,
-framed picture for Gallery, page-pulled-in for Trim, dashed-cut spread for Split, speech bubble with
-sound for Read aloud).
+framed picture for Gallery, page-pulled-in for Trim, dashed-cut spread for Split).
 
-Not yet: text selection or footnote links in books. Shane doesn't want auto-grouping. Read aloud is
-comics only (Shane uses Audible for books); no automatic male/female detection offline.
+Not yet: text selection or footnote links in books. Shane doesn't want auto-grouping. He asked
+about AI character voices reading comics aloud: possible only online (vision model reads bubbles and
+speakers, paid TTS voices per character). Read aloud with free offline voices (Piper/Kokoro via
+sherpa-onnx, ML Kit for bubbles) was built in build 31 and reverted: Shane didn't like the voice stuff
+(Kokoro took ~30 s per line on the tablet). Don't bring it back unless he asks.

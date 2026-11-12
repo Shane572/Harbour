@@ -20,16 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.TextButton
-import com.harbour.reader.VoiceRole
-import com.harbour.reader.VoicePack
-import kotlin.math.abs
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
@@ -180,137 +170,10 @@ fun SettingsSection(vm: MainViewModel) {
             }
         }
 
-        item { ReadAloudSettings(vm) }
-
         item {
             SettingsCard("Updates") {
                 UpdateSettingsRow(vm)
             }
-        }
-    }
-}
-
-/** Downloading the free voices, and picking who reads what. */
-@Composable
-private fun ReadAloudSettings(vm: MainViewModel) {
-    var confirmDelete by remember { mutableStateOf(false) }
-    SettingsCard("Read aloud") {
-        Text(
-            "Reads comics out loud with free voices that run on the tablet, with no internet needed once " +
-                "they're downloaded. Start it with the speech button at the top of the reader. Caption boxes get " +
-                "the narrator and speech bubbles start with the character voice below; change any bubble's voice " +
-                "from the bar while it's reading.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = HarbourColors.Muted,
-        )
-        Spacer(Modifier.height(16.dp))
-        SettingLabel("Voices")
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            VoicePack.entries.forEach { pack ->
-                Choice(pack.label, vm.voicePack == pack) { if (vm.voiceDownload == null) vm.changeVoicePack(pack) }
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(vm.voicePack.detail, style = MaterialTheme.typography.labelSmall, color = HarbourColors.Muted)
-        Spacer(Modifier.height(14.dp))
-        val progress = vm.voiceDownload
-        when {
-            progress != null -> {
-                Text(
-                    if (progress < 0f) "Unpacking the voices…" else "Downloading the voices… ${(progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = HarbourColors.Text,
-                )
-                Spacer(Modifier.height(8.dp))
-                if (progress < 0f) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth(), color = HarbourColors.Accent, trackColor = HarbourColors.SurfaceHigh)
-                } else {
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = HarbourColors.Accent,
-                        trackColor = HarbourColors.SurfaceHigh,
-                    )
-                }
-            }
-            !vm.voicesReady -> OutlinedButton(onClick = vm::downloadVoices) {
-                Text("Download ${vm.voicePack.label} voices (${vm.voicePack.downloadMb} MB)")
-            }
-            else -> {
-                VoiceRole.entries.forEach { role -> VoicePicker(vm, role) }
-                vm.sampleStatus?.let { status ->
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (vm.sampleBusy) {
-                            CircularProgressIndicator(Modifier.size(16.dp), color = HarbourColors.Accent, strokeWidth = 2.dp)
-                            Spacer(Modifier.width(10.dp))
-                        }
-                        Text(status, style = MaterialTheme.typography.bodySmall, color = HarbourColors.Text)
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                SettingLabel("Speech bubbles start as")
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Choice("Male", vm.characterVoice == VoiceRole.Male) { vm.changeCharacterVoice(VoiceRole.Male) }
-                    Choice("Female", vm.characterVoice == VoiceRole.Female) { vm.changeCharacterVoice(VoiceRole.Female) }
-                }
-                Spacer(Modifier.height(16.dp))
-                SettingLabel("Speed")
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf("Slower" to 0.85f, "Normal" to 1f, "Faster" to 1.15f).forEach { (label, speed) ->
-                        Choice(label, abs(vm.speechSpeed - speed) < 0.01f) { vm.changeSpeechSpeed(speed) }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { confirmDelete = true }) { Text("Delete voices", color = HarbourColors.Muted) }
-            }
-        }
-    }
-    if (confirmDelete) {
-        ConfirmDialog(
-            title = "Delete the voices?",
-            text = "Deletes the ${vm.voicePack.label} voices from the tablet. You can download them again any time.",
-            confirmLabel = "Delete",
-            onDismiss = { confirmDelete = false },
-            onConfirm = {
-                confirmDelete = false
-                vm.deleteVoices()
-            },
-        )
-    }
-}
-
-@Composable
-private fun VoicePicker(vm: MainViewModel, role: VoiceRole) {
-    var open by remember { mutableStateOf(false) }
-    val voice = vm.voicePack.byId(vm.voiceFor(role))
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-    ) {
-        Text(role.label, style = MaterialTheme.typography.titleSmall, color = HarbourColors.Text, modifier = Modifier.width(96.dp))
-        Box(Modifier.weight(1f)) {
-            OutlinedButton(onClick = { open = true }) {
-                Text(voice.label)
-                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
-            }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                vm.voicePack.voices.forEach { v ->
-                    DropdownMenuItem(
-                        text = { Text(if (v.id == voice.id) "${v.label}  ✓" else v.label) },
-                        onClick = {
-                            open = false
-                            vm.changeVoice(role, v.id)
-                            vm.playSample(v.id)
-                        },
-                    )
-                }
-            }
-        }
-        IconButton(onClick = { vm.playSample(voice.id) }, enabled = !vm.sampleBusy) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = "Hear ${role.label.lowercase()} voice", tint = HarbourColors.Accent)
         }
     }
 }
