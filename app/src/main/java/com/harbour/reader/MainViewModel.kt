@@ -389,6 +389,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (section.isComicVine && section != Section.ComicVine) show(Section.ComicVine)
     }
 
+    /** "Released": a year (and month, 1–12) to see issues by cover date; null for any time. */
+    var cvYear by mutableStateOf<Int?>(null)
+        private set
+    var cvMonth by mutableStateOf<Int?>(null)
+        private set
+
+    fun setComicVineDate(year: Int?, month: Int?) {
+        cvYear = year
+        cvMonth = if (year == null) null else month
+        if (section.isComicVine && section != Section.ComicVine) show(Section.ComicVine)
+    }
+
     fun submitComicVineSearch() {
         cvSubmits++
     }

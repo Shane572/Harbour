@@ -34,6 +34,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -355,8 +360,67 @@ private val CARD_CELL: Dp = 340.dp
 
 // ---------- Search (the top search bar searches Comic Vine on these pages)
 
+/** The cover-date range for a year (and month), as Comic Vine's "from|to" filter. */
+private fun dateRange(year: Int?, month: Int?): String? {
+    if (year == null) return null
+    return if (month == null) {
+        "$year-01-01|$year-12-31"
+    } else {
+        val ym = java.time.YearMonth.of(year, month)
+        "${ym.atDay(1)}|${ym.atEndOfMonth()}"
+    }
+}
+
+private fun monthName(month: Int): String = java.text.DateFormatSymbols.getInstance().months[month - 1]
+
+/** "Released": any time, or a year (and month) by cover date. */
+@Composable
+private fun DateFilter(vm: MainViewModel) {
+    var yearText by remember { mutableStateOf(vm.cvYear?.toString() ?: "") }
+    var monthMenu by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Released", style = MaterialTheme.typography.labelLarge, color = HarbourColors.Muted)
+        Choice("Any time", vm.cvYear == null) {
+            yearText = ""
+            vm.setComicVineDate(null, null)
+        }
+        OutlinedTextField(
+            value = yearText,
+            onValueChange = { t ->
+                val digits = t.filter { it.isDigit() }.take(4)
+                yearText = digits
+                val y = digits.toIntOrNull()?.takeIf { digits.length == 4 && it in 1930..2100 }
+                vm.setComicVineDate(y, vm.cvMonth)
+            },
+            label = { Text("Year") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.width(110.dp),
+        )
+        Box {
+            OutlinedButton(onClick = { monthMenu = true }, enabled = vm.cvYear != null) {
+                Text(vm.cvMonth?.let(::monthName) ?: "All year")
+            }
+            DropdownMenu(expanded = monthMenu, onDismissRequest = { monthMenu = false }) {
+                DropdownMenuItem(text = { Text("All year") }, onClick = {
+                    monthMenu = false
+                    vm.setComicVineDate(vm.cvYear, null)
+                })
+                (1..12).forEach { m ->
+                    DropdownMenuItem(text = { Text(monthName(m)) }, onClick = {
+                        monthMenu = false
+                        vm.setComicVineDate(vm.cvYear, m)
+                    })
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun ComicVineSection(vm: MainViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val q = vm.cvQuery.trim()
     // Ask once typing pauses (Comic Vine limits lookups per hour), or straight away on Search.
     var asked by remember { mutableStateOf(q) }
@@ -376,6 +440,48 @@ fun ComicVineSection(vm: MainViewModel) {
                 "&query=" + encode(it)
         },
     )
+    val all = (result as? Cv.Ok)?.json?.list("results") ?: emptyList()
+    val year = vm.cvYear
+    val range = dateRange(year, vm.cvMonth)
+    val dateLabel = year?.let { y -> vm.cvMonth?.let { "${monthName(it)} $y" } ?: "$y" }
+
+    // Issues by cover date: everything from then, or just the matching series' issues if there's a search.
+    val volumeIds = all.filter { it.optString("resource_type") == "volume" }
+        .filter { v -> year == null || (v.optString("start_year").toIntOrNull() ?: 0) <= year }
+        .map { it.optInt("id") }
+    val datedKey = Triple(range, asked, volumeIds)
+    val dated = remember(datedKey) { mutableStateListOf<JSONObject>() }
+    var datedTotal by remember(datedKey) { mutableIntStateOf(-1) }
+    var datedLoading by remember(datedKey) { mutableStateOf(false) }
+    var datedError by remember(datedKey) { mutableStateOf<String?>(null) }
+    val datedReady = range != null && (asked.isBlank() || result is Cv.Ok)
+    fun loadDated() {
+        if (datedLoading || range == null) return
+        if (asked.isNotBlank() && volumeIds.isEmpty()) {
+            datedTotal = 0
+            return
+        }
+        datedLoading = true
+        datedError = null
+        val offset = dated.size
+        val filter = (if (asked.isBlank()) "" else "volume:" + volumeIds.joinToString("|") + ",") + "cover_date:$range"
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    ComicVine.fetch(
+                        context,
+                        "issues/?filter=$filter&sort=cover_date:asc&limit=100&offset=$offset" +
+                            "&field_list=id,issue_number,name,image,cover_date,volume",
+                    )
+                }
+            }.onSuccess { json ->
+                datedTotal = json.optInt("number_of_total_results", 0)
+                dated.addAll(json.list("results"))
+            }.onFailure { datedError = errorText(it) }
+            datedLoading = false
+        }
+    }
+    LaunchedEffect(datedKey, datedReady) { if (datedReady && dated.isEmpty()) loadDated() }
 
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = CARD_CELL),
@@ -389,33 +495,83 @@ fun ComicVineSection(vm: MainViewModel) {
                 Text("Comic Vine", style = MaterialTheme.typography.displaySmall, color = HarbourColors.Text)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Search characters, series and creators with the search bar above. Pages you open are kept " +
-                        "on the tablet, so they work offline afterwards.",
+                    "Search characters, series and creators with the search bar above, and pick a year (and month) " +
+                        "to see what came out then. Pages you open are kept on the tablet, so they work offline afterwards.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = HarbourColors.Muted,
                 )
+                Spacer(Modifier.height(12.dp))
+                DateFilter(vm)
             }
         }
-        when {
-            vm.comicVineKey.isBlank() -> full("nokey") {
+        if (vm.comicVineKey.isBlank()) {
+            full("nokey") {
                 Hint("Add your Comic Vine key", "Paste your free Comic Vine API key in Settings → Comic Vine to browse.")
             }
+            return@LazyVerticalGrid
+        }
+
+        // What came out then (first when a date is picked).
+        if (range != null) {
+            full("dated-label") {
+                SectionLabel(
+                    "Issues from $dateLabel" +
+                        (if (asked.isNotBlank()) " in series matching “$asked”" else "") +
+                        (if (datedTotal > 0) " ($datedTotal)" else ""),
+                )
+            }
+            items(dated, key = { "d:" + it.optInt("id") }) { i ->
+                val title = "${i.optJSONObject("volume")?.optString("name") ?: ""} #${i.optString("issue_number")}".trim()
+                CvCard(i.img(), title, formatDate(i.str("cover_date")), i.str("name")) { openIssue(vm, i, title) }
+            }
+            full("dated-more") {
+                when {
+                    !datedReady || datedLoading -> Loading("Finding issues from $dateLabel…")
+                    datedError != null -> Problem(datedError ?: "")
+                    datedTotal == 0 -> Text(
+                        if (asked.isBlank()) "Comic Vine has no issues dated $dateLabel."
+                        else "None of the series matching “$asked” have issues dated $dateLabel.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = HarbourColors.Muted,
+                    )
+                    datedTotal > dated.size -> OutlinedButton(onClick = ::loadDated) {
+                        Text("Show more (${datedTotal - dated.size} left)")
+                    }
+                    else -> Unit
+                }
+            }
+            if (asked.isBlank()) {
+                full("dated-note") {
+                    Text(
+                        "By cover date, which for older comics is usually two or three months after they went on sale. " +
+                            "Type a name in the search bar to narrow it to one series or character.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HarbourColors.Muted,
+                    )
+                }
+            }
+        }
+
+        when {
             asked.isBlank() -> {
-                if (vm.cvRecent.isEmpty()) {
-                    full("start") { Hint("Start with a search", "Try a character (Raven), a series (New Teen Titans) or a creator (Marv Wolfman).") }
-                } else {
-                    full("recent-label") { SectionLabel("Recently viewed") }
-                    items(vm.cvRecent, key = { "recent:${it.type}:${it.id}" }) { r ->
-                        CvCard(r.image, r.name, r.detail, null) { vm.openCvRecent(r) }
+                if (range == null) {
+                    if (vm.cvRecent.isEmpty()) {
+                        full("start") { Hint("Start with a search", "Try a character (Raven), a series (New Teen Titans) or a creator (Marv Wolfman).") }
+                    } else {
+                        full("recent-label") { SectionLabel("Recently viewed") }
+                        items(vm.cvRecent, key = { "recent:${it.type}:${it.id}" }) { r ->
+                            CvCard(r.image, r.name, r.detail, null) { vm.openCvRecent(r) }
+                        }
                     }
                 }
             }
             result is Cv.Loading -> full("loading") { Loading() }
             result is Cv.Err -> full("error") { Problem(result.message) }
             result is Cv.Ok -> {
-                val all = result.json.list("results")
                 val characters = all.filter { it.optString("resource_type") == "character" }
+                // With a date picked, only series that had started by then.
                 val series = all.filter { it.optString("resource_type") == "volume" }
+                    .filter { v -> year == null || (v.optString("start_year").toIntOrNull() ?: 0) <= year }
                 val people = all.filter { it.optString("resource_type") == "person" }
                 if (all.isEmpty()) full("none") { Hint("Nothing found", "Comic Vine has nothing called \"$asked\". Check the spelling or try fewer words.") }
                 if (characters.isNotEmpty()) {
@@ -433,7 +589,7 @@ fun ComicVineSection(vm: MainViewModel) {
                     }
                 }
                 if (series.isNotEmpty()) {
-                    full("v-label") { SectionLabel("Series") }
+                    full("v-label") { SectionLabel(if (year != null) "Series running by $year" else "Series") }
                     items(series, key = { "v:" + it.optInt("id") }) { v ->
                         CvCard(v.img(), v.optString("name"), seriesLine(v), v.str("deck")) { openSeries(vm, v) }
                     }
