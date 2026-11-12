@@ -542,25 +542,63 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private var sampleJob: Job? = null
 
+    /** What the voice sample in Settings is doing, how long it took, or what went wrong. */
+    var sampleStatus by mutableStateOf<String?>(null)
+        private set
+
+    /** True while a sample is being loaded or spoken; more taps wait rather than start over. */
+    var sampleBusy by mutableStateOf(false)
+        private set
+
     /** Says a line in one voice, for choosing voices in Settings. */
     fun playSample(id: Int) {
-        sampleJob?.cancel()
+        if (sampleBusy) return
+        sampleBusy = true
+        val pack = voicePack
+        val name = pack.byId(id).name
         sampleJob = viewModelScope.launch {
-            if (!voicesLoaded) message = "Getting the voices ready…"
             var player: SpeechPlayer? = null
             try {
+                var loadSecs = 0.0
+                if (!voicesLoaded) {
+                    sampleStatus = "Loading the ${pack.label} voices (only the first time)…"
+                    val t = System.nanoTime()
+                    voiceEngine()
+                    loadSecs = (System.nanoTime() - t) / 1e9
+                }
                 val e = voiceEngine()
+                sampleStatus = "Getting $name ready to speak…"
+                val t = System.nanoTime()
                 val audio = withContext(Dispatchers.Default) {
                     e.speak("This is how I'll sound reading your comics.", id, speechSpeed)
                 }
+                val makeSecs = (System.nanoTime() - t) / 1e9
+                val speechSecs = audio.size.toDouble() / e.sampleRate
+                if (audio.isEmpty()) throw IllegalStateException("the voice made no sound")
+                val timing = String.format(
+                    java.util.Locale.getDefault(),
+                    "%.1f s of speech took %.1f s to make%s.",
+                    speechSecs,
+                    makeSecs,
+                    if (loadSecs > 0) String.format(java.util.Locale.getDefault(), " (loading took %.1f s)", loadSecs) else "",
+                )
+                val audio2 = getApplication<Application>().getSystemService(android.media.AudioManager::class.java)
+                val muted = audio2?.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) == 0
+                sampleStatus = if (muted) "Your media volume is off. Turn it up to hear $name. $timing" else "Speaking. $timing"
                 player = SpeechPlayer(e.sampleRate)
                 player.play(audio, MutableStateFlow(false))
+                sampleStatus = if (makeSecs > speechSecs * 1.2) {
+                    "$timing That's slower than it speaks, so reading will pause between lines. Quick voices keep up."
+                } else {
+                    timing
+                }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
-                message = "Couldn't play that voice"
+            } catch (e: Throwable) {
+                sampleStatus = "Couldn't play $name: ${e.javaClass.simpleName}${e.message?.let { ": $it" } ?: ""}"
             } finally {
                 player?.release()
+                sampleBusy = false
             }
         }
     }

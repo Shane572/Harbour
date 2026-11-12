@@ -172,7 +172,8 @@ class ReadAloud(
             vm.message = "Finished reading this issue aloud"
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Throwable, not just Exception: a voice library that can't load throws an Error.
             active = false
             index = -1
             status = null

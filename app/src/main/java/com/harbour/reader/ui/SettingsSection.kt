@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TextButton
 import com.harbour.reader.VoiceRole
@@ -237,6 +238,16 @@ private fun ReadAloudSettings(vm: MainViewModel) {
             }
             else -> {
                 VoiceRole.entries.forEach { role -> VoicePicker(vm, role) }
+                vm.sampleStatus?.let { status ->
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (vm.sampleBusy) {
+                            CircularProgressIndicator(Modifier.size(16.dp), color = HarbourColors.Accent, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(10.dp))
+                        }
+                        Text(status, style = MaterialTheme.typography.bodySmall, color = HarbourColors.Text)
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
                 SettingLabel("Speech bubbles start as")
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -298,7 +309,7 @@ private fun VoicePicker(vm: MainViewModel, role: VoiceRole) {
                 }
             }
         }
-        IconButton(onClick = { vm.playSample(voice.id) }) {
+        IconButton(onClick = { vm.playSample(voice.id) }, enabled = !vm.sampleBusy) {
             Icon(Icons.Filled.PlayArrow, contentDescription = "Hear ${role.label.lowercase()} voice", tint = HarbourColors.Accent)
         }
     }

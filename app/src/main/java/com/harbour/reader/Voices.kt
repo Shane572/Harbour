@@ -44,7 +44,7 @@ enum class VoicePack(
     val modelFile: String,
 ) {
     Quick("Quick", "Piper voices. Keeps up easily.", "vits-piper-en_US-libritts_r-medium-int8", 22, "en_US-libritts_r-medium.onnx"),
-    Natural("Natural", "Kokoro voices. Sounds best, but may pause before each line.", "kokoro-int8-en-v0_19", 98, "model.int8.onnx"),
+    Natural("Natural", "Kokoro voices. Sounds best, but too slow on this tablet: about 30 s before a line plays.", "kokoro-int8-en-v0_19", 98, "model.int8.onnx"),
     ;
 
     val voices: List<Voice> get() = if (this == Quick) Voices.piper else Voices.kokoro
