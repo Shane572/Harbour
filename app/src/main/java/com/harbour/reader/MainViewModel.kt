@@ -233,6 +233,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         settings.edit().putBoolean("black", on).apply()
     }
 
+    // Backup
+
+    var lastBackup by mutableStateOf(Backup.lastSaved())
+        private set
+
+    fun refreshBackupInfo() {
+        lastBackup = Backup.lastSaved()
+    }
+
+    fun backUpNow() {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching { Backup.write(getApplication()) }.isSuccess }
+            lastBackup = Backup.lastSaved()
+            message = if (ok) "Backup saved" else "Couldn't save the backup. Allow file access first (Add folder)."
+        }
+    }
+
+    /**
+     * Saves a backup when you leave Harbour, but only once there's something worth keeping, so a
+     * fresh install can never overwrite a good backup with an empty one.
+     */
+    fun autoBackup() {
+        val app = getApplication<Application>()
+        if (!StorageAccess.hasAccess(app)) return
+        if (groups.isEmpty() && progress.isEmpty() && bookProgress.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { runCatching { Backup.write(app) } }
+            lastBackup = Backup.lastSaved()
+        }
+    }
+
+    fun restoreBackup() {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching { Backup.restore(app) }.isSuccess }
+            if (ok) Backup.restartApp(app) else message = "Couldn't read the backup file"
+        }
+    }
+
+    // Rotation lock while reading
+
+    var rotationLocked by mutableStateOf(settings.getBoolean("rotationLocked", false))
+        private set
+
+    fun toggleRotationLock() {
+        rotationLocked = !rotationLocked
+        settings.edit().putBoolean("rotationLocked", rotationLocked).apply()
+        message = if (rotationLocked) "Rotation locked" else "Rotation unlocked"
+    }
+
     // Updates
 
     private val updater = Updater(app)

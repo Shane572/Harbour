@@ -302,6 +302,8 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
             subtitle = if (book != null) book.author else vm.subtitleFor(comic),
             onBack = vm::back,
             onOptions = { showOptions = !showOptions },
+            rotationLocked = vm.rotationLocked,
+            onToggleRotation = vm::toggleRotationLock,
         )
 
         BottomBar(
@@ -349,7 +351,15 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
 }
 
 @Composable
-private fun TopBar(visible: Boolean, comic: Comic, subtitle: String, onBack: () -> Unit, onOptions: () -> Unit) {
+private fun TopBar(
+    visible: Boolean,
+    comic: Comic,
+    subtitle: String,
+    onBack: () -> Unit,
+    onOptions: () -> Unit,
+    rotationLocked: Boolean,
+    onToggleRotation: () -> Unit,
+) {
     AnimatedVisibility(visible = visible, enter = fadeIn(tween(180)), exit = fadeOut(tween(180))) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -378,6 +388,7 @@ private fun TopBar(visible: Boolean, comic: Comic, subtitle: String, onBack: () 
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            RotationLockButton(rotationLocked, onToggleRotation)
             IconButton(onClick = onOptions) {
                 Icon(Icons.Filled.Settings, contentDescription = "Reading options", tint = Color.White)
             }

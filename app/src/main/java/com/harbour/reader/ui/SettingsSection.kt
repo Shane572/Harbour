@@ -32,6 +32,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import java.text.DateFormat
+import java.util.Date
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -135,11 +142,59 @@ fun SettingsSection(vm: MainViewModel) {
         }
 
         item {
+            var confirmRestore by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { vm.refreshBackupInfo() }
+            SettingsCard("Backup") {
+                Text(
+                    "Saves your groups, read orders, covers, Will Read, reading progress and settings to " +
+                        "Harbour/harbour-backup.json on the tablet. It's also saved automatically whenever you leave Harbour.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = HarbourColors.Muted,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    vm.lastBackup?.let { "Last saved ${formatWhen(it)}" } ?: "No backup yet",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = HarbourColors.Text,
+                )
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = vm::backUpNow) { Text("Back up now") }
+                    if (vm.lastBackup != null) {
+                        OutlinedButton(onClick = { confirmRestore = true }) { Text("Restore") }
+                    }
+                }
+            }
+            if (confirmRestore) {
+                RestoreDialog(vm, onDismiss = { confirmRestore = false })
+            }
+        }
+
+        item {
             SettingsCard("Updates") {
                 UpdateSettingsRow(vm)
             }
         }
     }
+}
+
+fun formatWhen(time: Long): String =
+    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(time))
+
+/** Confirms replacing everything with the backup. Harbour restarts to load it. */
+@Composable
+fun RestoreDialog(vm: MainViewModel, onDismiss: () -> Unit) {
+    ConfirmDialog(
+        title = "Restore your backup?",
+        text = "This replaces your groups, read orders, Will Read, progress and settings with the backup from " +
+            "${vm.lastBackup?.let(::formatWhen) ?: "earlier"}. Harbour will restart.",
+        confirmLabel = "Restore",
+        onDismiss = onDismiss,
+        onConfirm = {
+            onDismiss()
+            vm.restoreBackup()
+        },
+    )
 }
 
 @Composable

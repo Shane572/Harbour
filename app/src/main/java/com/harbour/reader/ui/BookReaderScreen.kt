@@ -427,6 +427,8 @@ private fun BookReaderContent(vm: MainViewModel, book: Book, epub: EpubBook) {
             onBack = vm::back,
             onContents = { panel = if (panel == "contents") null else "contents" },
             onStyle = { panel = if (panel == "style") null else "style" },
+            rotationLocked = vm.rotationLocked,
+            onToggleRotation = vm::toggleRotationLock,
         )
 
         BookBottomBar(
@@ -477,7 +479,15 @@ private fun BookReaderContent(vm: MainViewModel, book: Book, epub: EpubBook) {
 }
 
 @Composable
-private fun BookTopBar(visible: Boolean, book: Book, onBack: () -> Unit, onContents: () -> Unit, onStyle: () -> Unit) {
+private fun BookTopBar(
+    visible: Boolean,
+    book: Book,
+    onBack: () -> Unit,
+    onContents: () -> Unit,
+    onStyle: () -> Unit,
+    rotationLocked: Boolean,
+    onToggleRotation: () -> Unit,
+) {
     AnimatedVisibility(visible = visible, enter = fadeIn(tween(180)), exit = fadeOut(tween(180))) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -496,6 +506,7 @@ private fun BookTopBar(visible: Boolean, book: Book, onBack: () -> Unit, onConte
                     Text(book.author, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+            RotationLockButton(rotationLocked, onToggleRotation)
             IconButton(onClick = onContents) {
                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Contents", tint = Color.White)
             }

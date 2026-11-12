@@ -31,6 +31,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.ui.res.painterResource
 import com.harbour.reader.R
@@ -107,6 +109,18 @@ fun CoverImage(comic: LibraryItem?, modifier: Modifier = Modifier, corner: Dp = 
                 style = MaterialTheme.typography.headlineMedium,
                 color = HarbourColors.Muted.copy(alpha = 0.5f),
             )
+        }
+    }
+}
+
+/** Locks the screen's rotation while reading (lock icon), or shows that it's free to turn. */
+@Composable
+fun RotationLockButton(locked: Boolean, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle) {
+        if (locked) {
+            Icon(Icons.Filled.Lock, contentDescription = "Unlock rotation", tint = HarbourColors.Accent)
+        } else {
+            Icon(painterResource(R.drawable.ic_screen_rotation), contentDescription = "Lock rotation", tint = Color.White)
         }
     }
 }

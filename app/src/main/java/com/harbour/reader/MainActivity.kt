@@ -3,6 +3,7 @@ package com.harbour.reader
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
@@ -11,6 +12,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -37,6 +39,13 @@ import com.harbour.reader.ui.ReaderScreen
 import com.harbour.reader.ui.WelcomeScreen
 
 class MainActivity : ComponentActivity() {
+    private val vm: MainViewModel by viewModels()
+
+    override fun onStop() {
+        super.onStop()
+        vm.autoBackup()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -64,7 +73,9 @@ fun HarbourRoot(vm: MainViewModel = viewModel()) {
     }
 
     BackHandler(enabled = vm.canGoBack) { vm.back() }
-    ImmersiveMode(enabled = vm.screen is Screen.Reader || vm.screen is Screen.BookReader)
+    val reading = vm.screen is Screen.Reader || vm.screen is Screen.BookReader
+    ImmersiveMode(enabled = reading)
+    RotationLock(enabled = reading && vm.rotationLocked)
 
     val holder = rememberSaveableStateHolder()
     CompositionLocalProvider(LocalCovers provides vm.covers) {
@@ -85,6 +96,19 @@ fun HarbourRoot(vm: MainViewModel = viewModel()) {
     }
 
     vm.crashReport?.let { report -> CrashReportDialog(report, onDismiss = vm::dismissCrashReport) }
+}
+
+/** Holds the screen in its current orientation while reading, if you've locked it. */
+@Composable
+private fun RotationLock(enabled: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(enabled) {
+        val activity = view.context.findActivity()
+        if (enabled) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        onDispose {
+            if (enabled) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 }
 
 /** Hides the status and navigation bars and keeps the screen awake while reading. */
