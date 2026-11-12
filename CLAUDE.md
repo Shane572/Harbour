@@ -52,15 +52,30 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   selection, Add to group), `BooksSection`, `SettingsSection`, `ReaderScreen` (paged / two-page /
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme
 
-## Current state (build 15)
+## Current state (build 25)
 
-Works: collapsible sidebar (Home, All comics, Ungrouped, groups, Books, Settings); hand-made
-groups via long-press selection; CBZ and CBR comics; reader with direction per group (LTR, RTL,
-vertical/webtoon), one/two/auto pages, fit width, zoom, next issue; EPUB books with font, size,
-spacing, margins, page colour, contents and progress; accent colour, dark/black, cover size,
-sorting; in-app updates. Build 14 added: search bar with refresh on every page (matches group
-name + title, whole-number issue matching), per-group Read Order (`Group.readOrder`, drives Up next
-and Next issue), Jump back in (last 3 groups opened, Home), and Delete from device (with confirm); Home shows only 3 groups (most recently read first). Build 17: book-with-tick read badge, finished stays 100% until Reset progress (reader options), Set as group cover (`Group.coverKey`), stacked-comics All comics icon. Build 19: Will Read list (sidebar, glasses icon, prefs key `willRead`), groups in manual order with hold-and-drag reordering in the sidebar (`orderedGroups`, `reorderGroups`). Build 22: read order is edited by hold-and-drag on the group page (`readOrderDrag` in ComicsSection; a hold without moving still selects), back arrow on group pages, Back steps through page history. Build 15: PDF books (Books tab, cover = page 1) read in
-the comic reader via `PdfRenderer` (`ReaderScreen` with a `book`); progress stored as page/pages.
+Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, groups, Books, Settings) with
+hold-and-drag group reordering (`orderedGroups`, `reorderGroups`). Groups are made by hand
+(long-press to select, Add to group); one group per comic; `Group.coverKey` = Set as group cover.
+Home: Continue reading, 3 groups (most recently read first), Recently added. Search bar with
+refresh on every page; search is scoped to the current page (group, Will Read, Ungrouped, All
+comics, Books; Home/Settings search everything); group name + title, whole-number issue matching.
+Will Read = prefs key `willRead`. Delete from device (confirmed). Back steps through page history;
+group pages have a back arrow.
+
+Read order: per group (`Group.readOrder`), numbered at the top of the group page, drives Up next
+and Next issue. Edited by hold-and-drag on the group page (`readOrderDrag` in ComicsSection): the
+grid stays still, an accent bar marks the drop slot, change applied on release. Holding selects at
+the long-press (undone if you then drag); a drag needs ~24dp of movement. Shane found live
+reordering during drag and select-on-release both bad; don't go back to them.
+
+Reading: CBZ, CBR (libarchive, charset forced to UTF-8), PDF books (`PdfRenderer`, read in the
+comic reader, progress as page/pages), EPUB (WebView, CSS-column paging). Reader direction per
+group (LTR, RTL, vertical), one/two/auto pages, fit width, zoom, next issue. Finished items show a
+book-with-tick badge and stay at 100% until Reset progress (reader options / Aa). Progress bars sit
+under covers with a percentage.
+
+Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
+(Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books).
 
 Not yet: grouping books, text selection or footnote links in books, pinch zoom in vertical mode.
