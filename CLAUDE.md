@@ -63,7 +63,7 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme,
   `GallerySection` (Gallery page + full-screen `GalleryViewer`), `ComicInfoDialog`
 
-## Current state (build 40)
+## Current state (build 41)
 
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, Gallery, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`); the arrow by the GROUPS heading folds
@@ -123,9 +123,9 @@ step through history like any page; Recently viewed (prefs `comicvine`) works of
 the write-up, first/latest issue, main characters and creators with counts, then all issues (100 a page).
 Issue pages: credits by role, story, first appearances, arcs, characters, other covers. Settings card
 "Comic Vine" holds the key and clears saved pages.
-Released (year, optional month; `cvYear`/`cvMonth`): issues by cover date, 100 a page; with a search, only
-issues of the matching series (`issues/?filter=volume:a|b,cover_date:from|to`), and series that started later
-are hidden.
+Sorting (remembered): series lists by `cvSort` (Best match / Most issues, Newest first, Oldest first by start
+year); a series' issues oldest or newest first (`cvIssuesNewest`, Comic Vine's cover_date sort). Shane didn't
+want a date filter, just sorting.
 
 Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
 (Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books,

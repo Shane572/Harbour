@@ -389,16 +389,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (section.isComicVine && section != Section.ComicVine) show(Section.ComicVine)
     }
 
-    /** "Released": a year (and month, 1–12) to see issues by cover date; null for any time. */
-    var cvYear by mutableStateOf<Int?>(null)
-        private set
-    var cvMonth by mutableStateOf<Int?>(null)
+    /** Order for lists of series (search results, a character's series); remembered. */
+    var cvSort by mutableStateOf(enumValueOr(settings.getString("cvSort", null), CvSort.Best))
         private set
 
-    fun setComicVineDate(year: Int?, month: Int?) {
-        cvYear = year
-        cvMonth = if (year == null) null else month
-        if (section.isComicVine && section != Section.ComicVine) show(Section.ComicVine)
+    fun changeCvSort(sort: CvSort) {
+        cvSort = sort
+        settings.edit().putString("cvSort", sort.name).apply()
+    }
+
+    /** A series' issues newest first instead of from #1; remembered. */
+    var cvIssuesNewest by mutableStateOf(settings.getBoolean("cvIssuesNewest", false))
+        private set
+
+    fun changeCvIssuesNewest(newest: Boolean) {
+        cvIssuesNewest = newest
+        settings.edit().putBoolean("cvIssuesNewest", newest).apply()
     }
 
     fun submitComicVineSearch() {

@@ -8,6 +8,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
+/** How Comic Vine lists of series are ordered: Comic Vine's own order (or most issues), or by start year. */
+enum class CvSort { Best, Newest, Oldest }
+
 /** A Comic Vine page opened lately, for the Recently viewed list. [type] is character, volume, issue or person. */
 data class CvRecent(val type: String, val id: Int, val name: String, val image: String?, val detail: String)
 
