@@ -306,28 +306,63 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun guideById(id: String): Guide? = guides.firstOrNull { it.id == id }
 
+    // Each step's state, by "guide:block". Build 36 stored ticks as true; those count as read.
     private val guideStore = app.getSharedPreferences("guide_progress", Context.MODE_PRIVATE)
-    private val guideDone = mutableStateMapOf<String, Boolean>().apply {
-        guideStore.all.forEach { (k, v) -> if (v == true) put(k, true) }
+    private val guideSteps = mutableStateMapOf<String, StepState>().apply {
+        guideStore.all.forEach { (k, v) ->
+            when (v) {
+                true, "read" -> put(k, StepState.Read)
+                "skipped" -> put(k, StepState.Skipped)
+            }
+        }
     }
 
-    fun isGuideStepDone(g: Guide, index: Int): Boolean = guideDone["${g.id}:$index"] == true
+    fun guideStep(g: Guide, index: Int): StepState = guideSteps["${g.id}:$index"] ?: StepState.None
 
-    fun setGuideStepDone(g: Guide, index: Int, done: Boolean) {
+    fun setGuideStep(g: Guide, index: Int, state: StepState) {
         val key = "${g.id}:$index"
-        if (done) guideDone[key] = true else guideDone.remove(key)
-        guideStore.edit().apply { if (done) putBoolean(key, true) else remove(key) }.apply()
+        if (state == StepState.None) guideSteps.remove(key) else guideSteps[key] = state
+        guideStore.edit().apply {
+            when (state) {
+                StepState.None -> remove(key)
+                StepState.Read -> putString(key, "read")
+                StepState.Skipped -> putString(key, "skipped")
+            }
+        }.apply()
     }
 
+    /** Ticks off every step before this one that isn't already read or skipped. */
     fun markGuideReadBefore(g: Guide, index: Int) {
-        g.entries.filter { it < index }.forEach { setGuideStepDone(g, it, true) }
+        g.entries.filter { it < index && guideStep(g, it) == StepState.None }.forEach { setGuideStep(g, it, StepState.Read) }
     }
 
-    /** Steps read, and steps in all. */
-    fun guideProgress(g: Guide): Pair<Int, Int> = g.entries.count { isGuideStepDone(g, it) } to g.entries.size
+    /** Skips the rest of a section (steps already read stay read), or brings it back if it's all skipped. */
+    fun toggleSkipSection(g: Guide, index: Int) {
+        val steps = g.sectionOf(index)
+        val open = steps.filter { guideStep(g, it) != StepState.Read }
+        val allSkipped = open.isNotEmpty() && open.all { guideStep(g, it) == StepState.Skipped }
+        open.forEach { setGuideStep(g, it, if (allSkipped) StepState.None else StepState.Skipped) }
+    }
 
-    /** The library, ready for finding a guide's issues in it. */
-    val guideIndex: List<Guides.Indexed> by derivedStateOf { Guides.index(comics) { groupOfKey[it.key]?.name } }
+    // Covers for guide steps, from Comic Vine with Shane's own key (ComicVine.kt).
+
+    var comicVineKey by mutableStateOf(ComicVine.key(app))
+        private set
+
+    fun changeComicVineKey(key: String) {
+        ComicVine.setKey(getApplication(), key)
+        comicVineKey = key.trim()
+        message = if (comicVineKey.isEmpty()) "Comic Vine key removed" else "Comic Vine key saved"
+    }
+
+    suspend fun stepCover(block: GuideBlock): Result<StepCover> =
+        withContext(Dispatchers.IO) { runCatching { ComicVine.lookup(getApplication(), block) } }
+
+    /** Steps read, skipped, and in all. */
+    fun guideProgress(g: Guide): Triple<Int, Int, Int> {
+        val states = g.entries.map { guideStep(g, it) }
+        return Triple(states.count { it == StepState.Read }, states.count { it == StepState.Skipped }, states.size)
+    }
 
     // The sidebar's list of groups can be folded away.
 

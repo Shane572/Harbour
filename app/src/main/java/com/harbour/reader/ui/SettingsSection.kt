@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -167,6 +168,37 @@ fun SettingsSection(vm: MainViewModel) {
             }
             if (confirmRestore) {
                 RestoreDialog(vm, onDismiss = { confirmRestore = false })
+            }
+        }
+
+        item {
+            SettingsCard("Guide covers") {
+                Text(
+                    "Tap a step in a guide to see the cover of its first issue, from Comic Vine. It needs your own " +
+                        "free Comic Vine API key: sign in at comicvine.gamespot.com/api, copy the key shown there and " +
+                        "paste it here. Each cover is looked up once and then kept on the tablet. The key isn't put " +
+                        "in the backup.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = HarbourColors.Muted,
+                )
+                Spacer(Modifier.height(12.dp))
+                var key by remember { mutableStateOf(vm.comicVineKey) }
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text("Comic Vine API key") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { vm.changeComicVineKey(key) }, enabled = key.trim() != vm.comicVineKey) {
+                        Text("Save key")
+                    }
+                    if (vm.comicVineKey.isNotEmpty()) {
+                        Text("Key saved", style = MaterialTheme.typography.labelLarge, color = HarbourColors.Muted)
+                    }
+                }
             }
         }
 
