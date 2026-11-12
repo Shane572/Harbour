@@ -39,6 +39,7 @@ sealed interface Section {
     data object Home : Section
     data object AllComics : Section
     data object Ungrouped : Section
+    data object AllGroups : Section
     data object WillRead : Section
     data class InGroup(val id: String) : Section
     data object Books : Section
@@ -51,6 +52,7 @@ val Section.stateKey: String
         Section.Home -> "home"
         Section.AllComics -> "all"
         Section.Ungrouped -> "ungrouped"
+        Section.AllGroups -> "groups"
         Section.WillRead -> "will-read"
         is Section.InGroup -> "group:$id"
         Section.Books -> "books"
@@ -553,6 +555,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             is Section.InBookGroup -> groupById(s.id)?.name
             Section.WillRead -> "Will Read"
             Section.Ungrouped -> "Ungrouped"
+            Section.AllGroups -> "Groups"
             Section.AllComics -> "All comics"
             Section.Books -> "Books"
             Section.Home, Section.Settings -> null
@@ -562,6 +565,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         is Section.InGroup -> groupById(s.id)?.let(::comicsIn) ?: comics
         Section.WillRead -> willRead
         Section.Ungrouped -> ungrouped
+        Section.AllGroups -> comics.filter { c -> groupOfKey[c.key]?.forBooks == false }
         Section.Books, is Section.InBookGroup -> emptyList()
         Section.Home, Section.Settings, Section.AllComics -> comics
     }

@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -124,6 +125,7 @@ fun MainScreen(vm: MainViewModel) {
                             BookGroupSection(vm, group)
                         }
                     }
+                    Section.AllGroups -> AllGroupsSection(vm)
                     Section.Settings -> SettingsSection(vm)
                 }
             }
@@ -527,4 +529,62 @@ private fun SearchResults(vm: MainViewModel) {
             }
         },
     )
+}
+
+/** Every comic group (in your sidebar order) with how many comics are in each. */
+@Composable
+private fun AllGroupsSection(vm: MainViewModel) {
+    val groups = vm.orderedGroups
+    val grouped = remember(groups, vm.comics) { groups.sumOf { vm.comicsIn(it).size } }
+    var newGroup by remember { mutableStateOf(false) }
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = vm.coverSize.minCell()),
+        contentPadding = sectionPadding(),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(26.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }, key = "header") {
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Groups", style = MaterialTheme.typography.displaySmall, color = HarbourColors.Text)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${groups.size} groups · $grouped comics in groups · ${vm.ungrouped.size} ungrouped",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = HarbourColors.Muted,
+                    )
+                }
+                TextButton(onClick = { newGroup = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = HarbourColors.Accent)
+                    Spacer(Modifier.width(6.dp))
+                    Text("New group", color = HarbourColors.Accent)
+                }
+            }
+        }
+        if (groups.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
+                Hint("No groups yet", "Tap New group, or long-press comics in All comics and tap Add to group.")
+            }
+        }
+        items(groups, key = { it.id }) { g ->
+            val comics = remember(g, vm.comics) { vm.comicsIn(g) }
+            GroupCard(g, comics, cover = vm.coverOf(g), readCount = comics.count { vm.progress[it.key]?.finished == true }) {
+                vm.show(Section.InGroup(g.id))
+            }
+        }
+    }
+
+    if (newGroup) {
+        NameDialog(
+            title = "New group",
+            confirmLabel = "Create",
+            onDismiss = { newGroup = false },
+            onConfirm = { name ->
+                newGroup = false
+                vm.show(Section.InGroup(vm.createGroup(name).id))
+            },
+        )
+    }
 }

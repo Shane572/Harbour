@@ -57,7 +57,8 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`). Groups are made by hand
 (long-press to select, Add to group); one group per comic; `Group.coverKey` = Set as group cover.
-Home: Continue reading, 3 groups (most recently read first), Recently added. Search bar with
+Home: Continue reading, 3 groups (most recently read first), Recently added. Tapping the sidebar
+GROUPS heading opens `Section.AllGroups` (every comic group with counts, New group). Search bar with
 refresh on every page; search is scoped to the current page (group, Will Read, Ungrouped, All
 comics, Books; Home/Settings search everything); group name + title, whole-number issue matching.
 Will Read = prefs key `willRead`. Delete from device (confirmed). Book groups (`Group.forBooks`)

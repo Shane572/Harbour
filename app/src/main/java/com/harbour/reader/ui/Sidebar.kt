@@ -128,11 +128,16 @@ fun Sidebar(vm: MainViewModel) {
                     .padding(start = 26.dp, end = 12.dp, top = 18.dp, bottom = 2.dp)
                     .alpha(labels),
             ) {
+                // The heading opens a page of every group.
                 Text(
                     "GROUPS",
                     style = MaterialTheme.typography.labelMedium,
-                    color = HarbourColors.Muted,
-                    modifier = Modifier.weight(1f),
+                    color = if (section == Section.AllGroups) HarbourColors.Accent else HarbourColors.Muted,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = expanded) { vm.show(Section.AllGroups) }
+                        .padding(vertical = 10.dp),
                 )
                 IconButton(onClick = { newGroup = true }, enabled = expanded) {
                     Icon(Icons.Filled.Add, contentDescription = "New group", tint = HarbourColors.Muted)
