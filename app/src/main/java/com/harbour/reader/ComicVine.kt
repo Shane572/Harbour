@@ -88,7 +88,17 @@ object ComicVine {
             val publisher = v.optJSONObject("publisher")?.optString("name") ?: ""
             var score = 0
             if (name == wanted) score += 100 else if (name.contains(wanted) || wanted.contains(name)) score += 20 else score -= 40
-            if (t.year != null) score += if (start == t.year) 60 else -20
+            // A guide's year is usually when the series began ("Titans (2016)"), but sometimes when the
+            // run began inside an older series ("Wonder Woman (2003) #195" is the 1987 series). So:
+            // an exact start year wins, then the series that began closest before it.
+            if (t.year != null) {
+                score += when {
+                    start == null -> -20
+                    start == t.year -> 60
+                    start < t.year -> 40 - minOf(40, (t.year - start) / 2)
+                    else -> -20
+                }
+            }
             if (publisher.contains("DC") || publisher.contains("Marvel")) score += 10
             if (n != null) score += if (count >= n) 20 else -60
             score += minOf(count, 300) / 30 // the long-running main series over reprints and one-offs
@@ -99,6 +109,11 @@ object ComicVine {
             }
         }
         val volume = best ?: throw LookupException("Comic Vine didn't find ${t.name}.")
+        // Without an issue number there's nothing to check against, so only a series that's really
+        // called that will do (not "Wonder Woman" for "Wonder Woman: Year One").
+        if (t.number == null && !norm(volume.optString("name")).contains(wanted)) {
+            throw LookupException("Comic Vine has no series called ${t.name}, so there's no cover to show.")
+        }
         val volumeTitle = volume.optString("name") + (volume.optString("start_year").takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
 
         var imageUrl: String? = null
