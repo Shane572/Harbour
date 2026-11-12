@@ -70,6 +70,7 @@ import com.harbour.reader.Group
 import com.harbour.reader.MainViewModel
 import com.harbour.reader.Progress
 import com.harbour.reader.Section
+import com.harbour.reader.isComicVine
 import com.harbour.reader.stateKey
 
 /** The library: the sidebar on the left and the chosen section beside it. */
@@ -91,7 +92,7 @@ fun MainScreen(vm: MainViewModel) {
             SearchBar(vm)
             val holder = rememberSaveableStateHolder()
             val section = vm.section
-            if (vm.searchQuery.isNotBlank()) {
+            if (vm.searchQuery.isNotBlank() && !section.isComicVine) {
                 holder.SaveableStateProvider("search") { SearchResults(vm) }
             } else holder.SaveableStateProvider(section.stateKey) {
                 when (section) {
@@ -128,6 +129,11 @@ fun MainScreen(vm: MainViewModel) {
                     Section.AllGroups -> AllGroupsSection(vm)
                     Section.Gallery -> GallerySection(vm)
                     Section.Guides -> GuidesSection(vm)
+                    Section.ComicVine -> ComicVineSection(vm)
+                    is Section.CvCharacter -> CvCharacterPage(vm, section.id, section.name)
+                    is Section.CvSeries -> CvSeriesPage(vm, section.id, section.name)
+                    is Section.CvIssue -> CvIssuePage(vm, section.id, section.name)
+                    is Section.CvPerson -> CvPersonPage(vm, section.id, section.name)
                     is Section.InGuide -> {
                         val guide = vm.guideById(section.id)
                         if (guide == null) {
@@ -437,6 +443,9 @@ fun WelcomeScreen(vm: MainViewModel) {
 @Composable
 private fun SearchBar(vm: MainViewModel) {
     val focus = LocalFocusManager.current
+    // On the Comic Vine pages the bar searches Comic Vine.
+    val cv = vm.section.isComicVine
+    val text = if (cv) vm.cvQuery else vm.searchQuery
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -456,19 +465,22 @@ private fun SearchBar(vm: MainViewModel) {
             Icon(Icons.Filled.Search, contentDescription = null, tint = HarbourColors.Muted, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(12.dp))
             BasicTextField(
-                value = vm.searchQuery,
-                onValueChange = vm::search,
+                value = text,
+                onValueChange = { if (cv) vm.searchComicVine(it) else vm.search(it) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = HarbourColors.Text),
                 cursorBrush = SolidColor(HarbourColors.Accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+                keyboardActions = KeyboardActions(onSearch = {
+                    if (cv) vm.submitComicVineSearch()
+                    focus.clearFocus()
+                }),
                 modifier = Modifier.weight(1f),
                 decorationBox = { field ->
                     Box(contentAlignment = Alignment.CenterStart) {
-                        if (vm.searchQuery.isEmpty()) {
+                        if (text.isEmpty()) {
                             Text(
-                                "Search",
+                                if (cv) "Search Comic Vine: characters, series, creators" else "Search",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = HarbourColors.Muted,
                                 maxLines = 1,
@@ -478,9 +490,9 @@ private fun SearchBar(vm: MainViewModel) {
                     }
                 },
             )
-            if (vm.searchQuery.isNotEmpty()) {
+            if (text.isNotEmpty()) {
                 IconButton(onClick = {
-                    vm.search("")
+                    if (cv) vm.searchComicVine("") else vm.search("")
                     focus.clearFocus()
                 }) {
                     Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = HarbourColors.Muted)

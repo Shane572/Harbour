@@ -48,7 +48,9 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   PDF via Android's `PdfRenderer` (PDFs are books in the library)
 - `EpubBook.kt` — EPUB container/OPF/spine/contents parsing
 - `Guides.kt` — reading guides from `assets/guides.json`; `StepState` (read / skipped)
-- `ComicVine.kt` — step covers via Shane's own Comic Vine key (prefs `comicvine`, not backed up); covers
+- `ui/ComicVineSection.kt` — browsing Comic Vine: search, character / series / issue / creator pages
+- `ComicVine.kt` — Comic Vine API: `fetch` (responses cached in filesDir/cv_cache, a week, stale copy used
+  offline), `image` (cacheDir/cv_images), step covers; all via Shane's own Comic Vine key (prefs `comicvine`, not backed up); covers
   saved in filesDir/guide_covers so each is fetched once. GCD covers are bot-protected: don't scrape them
 - `ComicInfo.kt` — ComicInfo.xml inside CBZ/CBR (series, credits, summary) for About this issue
 - `ShownPages.kt` — the reader's view of a comic: trimmed margins (`Trim`), split spreads; maps
@@ -61,7 +63,7 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme,
   `GallerySection` (Gallery page + full-screen `GalleryViewer`), `ComicInfoDialog`
 
-## Current state (build 37)
+## Current state (build 39)
 
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, Gallery, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`); the arrow by the GROUPS heading folds
@@ -114,6 +116,13 @@ read (circle) or skipped (arrow-over icon; the one by a heading skips the whole 
 `guide_progress` prefs (in the backup); first untouched step = Up next. Tap a step or heading for its
 first issue's cover (Comic Vine); hold a step for the menu. No library matching: Shane rotates comics
 off the tablet and tracks it himself.
+
+Comic Vine (sidebar, globe icon): on its pages the top search bar searches Comic Vine (`cvQuery`,
+`Section.isComicVine`) after a pause in typing or on Search. Sections `CvCharacter/CvSeries/CvIssue/CvPerson`
+step through history like any page; Recently viewed (prefs `comicvine`) works offline. Series pages show
+the write-up, first/latest issue, main characters and creators with counts, then all issues (100 a page).
+Issue pages: credits by role, story, first appearances, arcs, characters, other covers. Settings card
+"Comic Vine" holds the key and clears saved pages.
 
 Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
 (Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books,

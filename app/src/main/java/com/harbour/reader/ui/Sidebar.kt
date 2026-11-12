@@ -67,6 +67,7 @@ import com.harbour.reader.Group
 import com.harbour.reader.MainViewModel
 import com.harbour.reader.R
 import com.harbour.reader.Section
+import com.harbour.reader.isComicVine
 
 private val ExpandedWidth = 272.dp
 private val CollapsedWidth = 76.dp
@@ -134,6 +135,9 @@ fun Sidebar(vm: MainViewModel) {
                 labels,
             ) {
                 vm.show(Section.Guides)
+            }
+            NavItem(painterResource(R.drawable.ic_comicvine), "Comic Vine", section.isComicVine, width, labels) {
+                vm.show(Section.ComicVine)
             }
 
             Row(

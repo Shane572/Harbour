@@ -8,6 +8,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
+/** A Comic Vine page opened lately, for the Recently viewed list. [type] is character, volume, issue or person. */
+data class CvRecent(val type: String, val id: Int, val name: String, val image: String?, val detail: String)
+
 /** A guide step's cover, saved on the tablet, and what it is ("Uncanny X-Men (1963) #176 · 1983"). */
 data class StepCover(val file: File, val caption: String)
 
@@ -68,7 +71,7 @@ object ComicVine {
     fun lookup(context: Context, block: GuideBlock): StepCover {
         cached(context, block)?.let { return it }
         val key = key(context)
-        if (key.isBlank()) throw LookupException("Add your Comic Vine key in Settings → Guide covers to see covers.")
+        if (key.isBlank()) throw LookupException("Add your Comic Vine key in Settings → Comic Vine to see covers.")
         val t = target(block) ?: throw LookupException("This step doesn't name an issue to look up.")
 
         val volumes = get(
@@ -139,6 +142,52 @@ object ComicVine {
         return StepCover(file, caption)
     }
 
+    // Browsing: any Comic Vine request, saved on the tablet so pages open offline afterwards and each
+    // is only fetched again once it's a week old (or never, if the tablet's offline).
+
+    private fun cacheDir(context: Context) = File(context.filesDir, "cv_cache").apply { mkdirs() }
+
+    /** A Comic Vine API request ("character/4005-1699/?field_list=…"), from the saved copy when there is one. */
+    fun fetch(context: Context, path: String, maxAgeHours: Long = 24 * 7): JSONObject {
+        val file = File(cacheDir(context), path.hashCode().toUInt().toString(16) + "-" + path.length + ".json")
+        val fresh = file.exists() && System.currentTimeMillis() - file.lastModified() < maxAgeHours * 3_600_000
+        if (fresh) runCatching { return JSONObject(file.readText()) }
+        val key = key(context)
+        if (key.isBlank()) throw LookupException("Add your Comic Vine key in Settings → Comic Vine first.")
+        return try {
+            get(key, path).also { json ->
+                val tmp = File(file.path + ".tmp")
+                tmp.writeText(json.toString())
+                if (!tmp.renameTo(file)) {
+                    file.delete()
+                    tmp.renameTo(file)
+                }
+            }
+        } catch (e: Exception) {
+            // Offline or refused: an older saved copy is better than nothing.
+            if (file.exists()) runCatching { return JSONObject(file.readText()) }
+            throw e
+        }
+    }
+
+    /** A Comic Vine picture, downloaded once into the cache folder (Android may clear it if space runs low). */
+    fun image(context: Context, url: String): File {
+        val dir = File(context.cacheDir, "cv_images").apply { mkdirs() }
+        val file = File(dir, url.hashCode().toUInt().toString(16) + "-" + url.length + ".img")
+        if (!file.exists()) download(url, file)
+        return file
+    }
+
+    /** How much space browsing has saved, and clearing it. */
+    fun savedBytes(context: Context): Long =
+        (cacheDir(context).listFiles()?.sumOf { it.length() } ?: 0L) +
+            (File(context.cacheDir, "cv_images").listFiles()?.sumOf { it.length() } ?: 0L)
+
+    fun clearSaved(context: Context) {
+        cacheDir(context).deleteRecursively()
+        File(context.cacheDir, "cv_images").deleteRecursively()
+    }
+
     private fun norm(s: String) = s.lowercase().replace(Regex("^the "), "").replace(Regex("[^a-z0-9]"), "")
 
     private fun imageOf(image: JSONObject?): String? =
@@ -158,7 +207,7 @@ object ComicVine {
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             when (json.optInt("status_code", 1)) {
                 1 -> return json
-                100 -> throw LookupException("That Comic Vine key didn't work. Check it in Settings → Guide covers.")
+                100 -> throw LookupException("That Comic Vine key didn't work. Check it in Settings → Comic Vine.")
                 else -> throw LookupException("Comic Vine: ${json.optString("error", "lookup failed")}")
             }
         } finally {
