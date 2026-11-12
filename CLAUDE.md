@@ -50,14 +50,15 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
 - `ComicInfo.kt` — ComicInfo.xml inside CBZ/CBR (series, credits, summary) for About this issue
 - `ShownPages.kt` — the reader's view of a comic: trimmed margins (`Trim`), split spreads; maps
   shown pages back to the file's pages, which progress and saved pages always use
-- `GalleryStore.kt` — saved pages: JPEGs + `gallery.json` in `Harbour/Gallery` (outlive the app)
+- `GalleryStore.kt` — saved pages: JPEGs in `Pictures/Harbour` (show in the tablet's Gallery app, outlive the
+  comic and the app; media-scanned), list in `Harbour/gallery.json`. Old `Harbour/Gallery` is migrated on load
 - `CoverCache.kt`, `ProgressStore.kt` (comics + books), `Updater.kt`, `StorageAccess.kt`, `HarbourApp.kt`
 - `ui/` — `LibraryScreen` (main layout, Home, welcome), `Sidebar`, `ComicsSection` (grids,
   selection, Add to group), `BooksSection`, `SettingsSection`, `ReaderScreen` (paged / two-page /
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme,
   `GallerySection` (Gallery page + full-screen `GalleryViewer`), `ComicInfoDialog`
 
-## Current state (build 30)
+## Current state (build 34)
 
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, Gallery, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`). Groups are made by hand
@@ -92,12 +93,15 @@ under covers with a percentage.
 Gallery: heart in the reader's top bar saves the page (spreads ask which page) at ~8 MP, trimmed if
 trimming is on. Gallery page is a staggered wall of saved pages, filter by group; tap for the
 full-screen viewer (swipe, zoom) with Read from here (`vm.readFrom`, `takePendingStart`), About this
-issue, Set as wallpaper (home / lock / both) and Remove. About this issue is also the reader's info
+issue, Set as wallpaper (home / lock / both), Rename (renames the file too) and Remove. About this issue is also the reader's info
 button and a one-comic selection action.
 
 Trim margins and Split spreads are global on/off icons in the reader top bar, like rotation lock
 (`trimMargins`, `splitSpreads`). Spread detection reads every page's size once per comic
 (`spreadsOf`, cached); the cover is never split; RTL shows the right half first.
+
+Messages are Harbour's own pill at the bottom (`HarbourRoot`), not Android toasts: on the tablet toasts
+came with a generic Android icon. Build 34 also deletes build 31's leftover voices (`clearOldVoices`).
 
 Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
 (Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books,

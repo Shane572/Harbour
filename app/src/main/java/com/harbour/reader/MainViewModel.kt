@@ -28,8 +28,8 @@ sealed interface Screen {
     data class BookReader(val book: Book) : Screen
     data object Browse : Screen
 
-    /** Saved pages full screen, starting at [start]; [files] picks which (and in what order). */
-    data class GalleryView(val files: List<String>, val start: Int) : Screen
+    /** Saved pages full screen, starting at [start]; [ids] picks which (and in what order). */
+    data class GalleryView(val ids: List<String>, val start: Int) : Screen
 }
 
 val Screen.stateKey: String
@@ -349,8 +349,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     fun loadGallery() {
+        val app = getApplication<Application>()
         viewModelScope.launch {
-            gallery = withContext(Dispatchers.IO) { runCatching { GalleryStore.load() }.getOrDefault(emptyList()) }
+            gallery = withContext(Dispatchers.IO) { runCatching { GalleryStore.load(app) }.getOrDefault(emptyList()) }
+        }
+    }
+
+    // Build 31 had read aloud (since removed). Clear out the voices it downloaded and its settings.
+    private fun clearOldVoices() {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                File(app.filesDir, "voices").deleteRecursively()
+                app.cacheDir.listFiles()?.filter { it.name.endsWith(".tar.bz2") }?.forEach { it.delete() }
+                app.deleteSharedPreferences("bubble_voices")
+                val old = settings.all.keys.filter { it.startsWith("voice") || it == "speechSpeed" }
+                if (old.isNotEmpty()) settings.edit().apply { old.forEach(::remove) }.apply()
+            }
         }
     }
 
@@ -361,11 +376,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (savedPage(c.key, page) != null) return
         val group = groupOfKey[c.key]?.name
         val trim = trimMargins
+        val app = getApplication<Application>()
         viewModelScope.launch {
             val saved = withContext(Dispatchers.IO) {
                 runCatching {
                     val bmp = archive.decodePage(page, 8_000_000L) ?: error("Couldn't decode the page")
-                    GalleryStore.write(if (trim) Trim.margins(bmp) else bmp, c, group, page, pages)
+                    GalleryStore.write(app, if (trim) Trim.margins(bmp) else bmp, c, group, page, pages)
                 }.getOrNull()
             }
             if (saved == null) {
@@ -375,25 +391,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             gallery = listOf(saved) + gallery
             val list = gallery
             withContext(Dispatchers.IO) { runCatching { GalleryStore.save(list) } }
-            message = "Saved page ${page + 1} to your gallery"
+            message = "Saved page ${page + 1} to your gallery and Pictures"
         }
     }
 
-    /** Takes a page out of the gallery and deletes its picture. The comic isn't touched. */
+    /** Takes a page out of the gallery and deletes its picture from the tablet. The comic isn't touched. */
     fun removeSaved(p: SavedPage) {
-        gallery = gallery.filter { it.file != p.file }
+        gallery = gallery.filter { it.id != p.id }
         val list = gallery
+        val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                GalleryStore.imageOf(p).delete()
+                GalleryStore.delete(app, p)
                 GalleryStore.save(list)
             }
         }
         message = "Removed from your gallery"
     }
 
+    /** Gives a saved page your own name (blank goes back to the comic's title). */
+    fun renameSaved(p: SavedPage, name: String) {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val renamed = withContext(Dispatchers.IO) { runCatching { GalleryStore.rename(app, p, name) }.getOrNull() }
+            if (renamed == null) {
+                message = "Couldn't rename that picture"
+                return@launch
+            }
+            gallery = gallery.map { if (it.id == p.id) renamed else it }
+            val list = gallery
+            withContext(Dispatchers.IO) { runCatching { GalleryStore.save(list) } }
+        }
+    }
+
     fun openGallery(list: List<SavedPage>, start: Int) {
-        backStack.add(Screen.GalleryView(list.map { it.file }, start))
+        backStack.add(Screen.GalleryView(list.map { it.id }, start))
     }
 
     // Set by Read from here in the gallery, so the reader starts on that page.
@@ -444,6 +476,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (roots.isNotEmpty()) rescan()
         loadGallery()
+        clearOldVoices()
         checkForUpdate(quiet = true)
     }
 

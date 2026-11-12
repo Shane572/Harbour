@@ -119,11 +119,11 @@ private object GalleryThumbs {
 fun GallerySection(vm: MainViewModel) {
     val all = vm.gallery
     val groupOfPage = remember(all, vm.groups) {
-        all.associate { p -> p.file to (vm.groupOfKey[p.comicKey]?.name ?: p.group) }
+        all.associate { p -> p.id to (vm.groupOfKey[p.comicKey]?.name ?: p.group) }
     }
     val groupNames = remember(groupOfPage) { groupOfPage.values.filterNotNull().distinct().sortedWith(NaturalOrder) }
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
-    val shown = remember(all, filter, groupOfPage) { if (filter == null) all else all.filter { groupOfPage[it.file] == filter } }
+    val shown = remember(all, filter, groupOfPage) { if (filter == null) all else all.filter { groupOfPage[it.id] == filter } }
 
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Adaptive(vm.coverSize.minCell() * 1.4f),
@@ -158,13 +158,13 @@ fun GallerySection(vm: MainViewModel) {
             item(span = StaggeredGridItemSpan.FullLine, key = "empty") {
                 Hint(
                     "No saved pages yet",
-                    "While reading, tap the heart at the top to save the page you're on. Saved pages are kept in " +
-                        "Harbour/Gallery on the tablet.",
+                    "While reading, tap the heart at the top to save the page you're on. Saved pages go in the " +
+                        "tablet's Pictures (a Harbour album), so they stay even if the comic is deleted.",
                 )
             }
         }
-        items(shown, key = { it.file }) { p ->
-            GalleryTile(p, groupOfPage[p.file]) { vm.openGallery(shown, shown.indexOf(p)) }
+        items(shown, key = { it.id }) { p ->
+            GalleryTile(p, groupOfPage[p.id]) { vm.openGallery(shown, shown.indexOf(p)) }
         }
     }
 }
@@ -172,6 +172,7 @@ fun GallerySection(vm: MainViewModel) {
 @Composable
 private fun GalleryTile(page: SavedPage, group: String?, onClick: () -> Unit) {
     val file = remember(page.file) { GalleryStore.imageOf(page) }
+    val caption = if (page.name != null) page.title else "Page ${page.page + 1}"
     val bmp by produceState(GalleryThumbs.peek(file), file) {
         if (value == null) value = withContext(Dispatchers.IO) { runCatching { GalleryThumbs.load(file, 600) }.getOrNull() }
     }
@@ -192,7 +193,7 @@ private fun GalleryTile(page: SavedPage, group: String?, onClick: () -> Unit) {
         } else {
             Image(
                 bitmap = b,
-                contentDescription = "${page.title}, page ${page.page + 1}",
+                contentDescription = page.displayName,
                 contentScale = ContentScale.Crop,
                 filterQuality = FilterQuality.High,
                 modifier = Modifier
@@ -202,9 +203,9 @@ private fun GalleryTile(page: SavedPage, group: String?, onClick: () -> Unit) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text(page.title, style = MaterialTheme.typography.bodyMedium, color = HarbourColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(page.displayName, style = MaterialTheme.typography.bodyMedium, color = HarbourColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
-            listOfNotNull("Page ${page.page + 1}", group).joinToString(" · "),
+            listOfNotNull(caption, group).joinToString(" · "),
             style = MaterialTheme.typography.labelSmall,
             color = HarbourColors.Muted,
             maxLines = 1,
@@ -216,9 +217,9 @@ private fun GalleryTile(page: SavedPage, group: String?, onClick: () -> Unit) {
 /** Saved pages full screen: swipe between them, pinch or double-tap to zoom, tap for the controls. */
 @Composable
 fun GalleryViewer(vm: MainViewModel, screen: Screen.GalleryView) {
-    val pages = remember(vm.gallery, screen.files) {
-        val byFile = vm.gallery.associateBy { it.file }
-        screen.files.mapNotNull { byFile[it] }
+    val pages = remember(vm.gallery, screen.ids) {
+        val byId = vm.gallery.associateBy { it.id }
+        screen.ids.mapNotNull { byId[it] }
     }
     Box(
         Modifier
@@ -240,6 +241,7 @@ private fun GalleryPages(vm: MainViewModel, pages: List<SavedPage>, start: Int) 
     var zoomed by remember { mutableStateOf(false) }
     var about by remember { mutableStateOf<Comic?>(null) }
     var removing by remember { mutableStateOf<SavedPage?>(null) }
+    var renaming by remember { mutableStateOf<SavedPage?>(null) }
     var wallpaperMenu by remember { mutableStateOf(false) }
     val current = pages[pager.currentPage.coerceIn(0, pages.lastIndex)]
     val comic = vm.comicsByKey[current.comicKey]
@@ -254,7 +256,7 @@ private fun GalleryPages(vm: MainViewModel, pages: List<SavedPage>, start: Int) 
         modifier = Modifier.fillMaxSize(),
         userScrollEnabled = !zoomed,
         beyondViewportPageCount = 1,
-        key = { pages[it].file },
+        key = { pages[it].id },
     ) { i ->
         ZoomableImage(
             file = GalleryStore.imageOf(pages[i]),
@@ -277,9 +279,10 @@ private fun GalleryPages(vm: MainViewModel, pages: List<SavedPage>, start: Int) 
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
             Column(Modifier.weight(1f)) {
-                Text(current.title, style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(current.displayName, style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOfNotNull(
+                        current.title.takeIf { current.name != null },
                         if (current.pages > 0) "Page ${current.page + 1} of ${current.pages}" else "Page ${current.page + 1}",
                         vm.groupOfKey[current.comicKey]?.name ?: current.group,
                     ).joinToString(" · "),
@@ -320,6 +323,7 @@ private fun GalleryPages(vm: MainViewModel, pages: List<SavedPage>, start: Int) 
                         }
                     }
                 }
+                ViewerAction("Rename") { renaming = current }
                 ViewerAction("Remove") { removing = current }
             }
         }
@@ -336,10 +340,22 @@ private fun GalleryPages(vm: MainViewModel, pages: List<SavedPage>, start: Int) 
             },
         )
     }
+    renaming?.let { p ->
+        NameDialog(
+            title = "Rename picture",
+            confirmLabel = "Rename",
+            initial = p.displayName,
+            onDismiss = { renaming = null },
+            onConfirm = { name ->
+                renaming = null
+                vm.renameSaved(p, name)
+            },
+        )
+    }
     removing?.let { p ->
         ConfirmDialog(
             title = "Remove from gallery?",
-            text = "The saved picture of page ${p.page + 1} is deleted. The comic itself isn't touched.",
+            text = "The picture is deleted from the tablet, including its Gallery app. The comic itself isn't touched.",
             confirmLabel = "Remove",
             onDismiss = { removing = null },
             onConfirm = {
