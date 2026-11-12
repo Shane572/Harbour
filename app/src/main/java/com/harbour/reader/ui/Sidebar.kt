@@ -140,7 +140,7 @@ fun Sidebar(vm: MainViewModel) {
             }
             ReorderableGroups(vm, section, width, labels, Modifier.weight(1f))
 
-            NavItem(painterResource(R.drawable.ic_book), "Books", section == Section.Books, width, labels) {
+            NavItem(painterResource(R.drawable.ic_book), "Books", section == Section.Books || section is Section.InBookGroup, width, labels) {
                 vm.show(Section.Books)
             }
             NavItem(rememberVectorPainter(Icons.Filled.Settings), "Settings", section == Section.Settings, width, labels) {

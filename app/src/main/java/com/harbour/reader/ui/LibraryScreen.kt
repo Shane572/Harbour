@@ -116,6 +116,14 @@ fun MainScreen(vm: MainViewModel) {
                         }
                     }
                     Section.Books -> BooksSection(vm)
+                    is Section.InBookGroup -> {
+                        val group = vm.groupById(section.id)
+                        if (group == null) {
+                            LaunchedEffect(section.id) { vm.show(Section.Books) }
+                        } else {
+                            BookGroupSection(vm, group)
+                        }
+                    }
                     Section.Settings -> SettingsSection(vm)
                 }
             }
@@ -166,7 +174,7 @@ private fun HomeSection(vm: MainViewModel) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         if (vm.scanning && vm.comics.isEmpty()) "Looking for comics…"
-                        else "${vm.comics.size} comics · ${vm.groups.size} groups",
+                        else "${vm.comics.size} comics · ${vm.orderedGroups.size} groups",
                         style = MaterialTheme.typography.bodyMedium,
                         color = HarbourColors.Muted,
                     )

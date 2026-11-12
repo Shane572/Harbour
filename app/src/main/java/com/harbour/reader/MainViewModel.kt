@@ -42,6 +42,7 @@ sealed interface Section {
     data object WillRead : Section
     data class InGroup(val id: String) : Section
     data object Books : Section
+    data class InBookGroup(val id: String) : Section
     data object Settings : Section
 }
 
@@ -53,6 +54,7 @@ val Section.stateKey: String
         Section.WillRead -> "will-read"
         is Section.InGroup -> "group:$id"
         Section.Books -> "books"
+        is Section.InBookGroup -> "book-group:$id"
         Section.Settings -> "settings"
     }
 
@@ -101,7 +103,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Groups in Shane's own order (drag to reorder in the sidebar). New groups go at the end. */
-    val orderedGroups: List<Group> get() = groups
+    val orderedGroups: List<Group> by derivedStateOf { groups.filter { !it.forBooks } }
+
+    /** Book groups, in the order they were made. */
+    val bookGroups: List<Group> by derivedStateOf { groups.filter { it.forBooks } }
+
+    val booksByKey: Map<String, Book> by derivedStateOf { books.associateBy { it.key } }
+
+    /** A book group's books, by title. */
+    fun booksIn(g: Group): List<Book> = g.keys.mapNotNull { booksByKey[it] }.sortedWith(compareBy(NaturalOrder) { it.title })
+
+    fun bookCoverOf(g: Group): Book? =
+        g.coverKey?.takeIf { it in g.keys }?.let { booksByKey[it] } ?: booksIn(g).firstOrNull()
 
     val ungrouped: List<Comic> by derivedStateOf { comics.filter { it.key !in groupOfKey } }
 
@@ -367,8 +380,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // Groups
 
-    fun createGroup(name: String, keys: Collection<String> = emptyList()): Group {
-        val g = Group(UUID.randomUUID().toString(), name.trim().ifEmpty { "New group" }, emptyList())
+    fun createGroup(name: String, keys: Collection<String> = emptyList(), forBooks: Boolean = false): Group {
+        val g = Group(UUID.randomUUID().toString(), name.trim().ifEmpty { "New group" }, emptyList(), forBooks = forBooks)
         groups = groups + g
         if (keys.isEmpty()) groupStore.save(groups) else addToGroup(g.id, keys)
         return g
@@ -385,6 +398,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         groups = groups.filterNot { it.id == id }
         groupStore.save(groups)
         if (section == Section.InGroup(id)) section = Section.Home
+        if (section == Section.InBookGroup(id)) section = Section.Books
     }
 
     /** Moves comics into a group. A comic is only ever in one group. */
@@ -536,6 +550,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val searchScopeName: String?
         get() = when (val s = section) {
             is Section.InGroup -> groupById(s.id)?.name
+            is Section.InBookGroup -> groupById(s.id)?.name
             Section.WillRead -> "Will Read"
             Section.Ungrouped -> "Ungrouped"
             Section.AllComics -> "All comics"
@@ -547,12 +562,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         is Section.InGroup -> groupById(s.id)?.let(::comicsIn) ?: comics
         Section.WillRead -> willRead
         Section.Ungrouped -> ungrouped
-        Section.Books -> emptyList()
+        Section.Books, is Section.InBookGroup -> emptyList()
         Section.Home, Section.Settings, Section.AllComics -> comics
     }
 
-    private fun booksInScope(): List<Book> = when (section) {
+    private fun booksInScope(): List<Book> = when (val s = section) {
         Section.Books, Section.Home, Section.Settings -> books
+        is Section.InBookGroup -> groupById(s.id)?.let(::booksIn) ?: books
         else -> emptyList()
     }
 

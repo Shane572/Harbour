@@ -52,7 +52,7 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   selection, Add to group), `BooksSection`, `SettingsSection`, `ReaderScreen` (paged / two-page /
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme
 
-## Current state (build 25)
+## Current state (build 28)
 
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`). Groups are made by hand
@@ -60,7 +60,9 @@ hold-and-drag group reordering (`orderedGroups`, `reorderGroups`). Groups are ma
 Home: Continue reading, 3 groups (most recently read first), Recently added. Search bar with
 refresh on every page; search is scoped to the current page (group, Will Read, Ungrouped, All
 comics, Books; Home/Settings search everything); group name + title, whole-number issue matching.
-Will Read = prefs key `willRead`. Delete from device (confirmed). Back steps through page history;
+Will Read = prefs key `willRead`. Delete from device (confirmed). Book groups (`Group.forBooks`)
+live on the Books page (`BookGroupSection`), added via a book's long-press menu; comic views use
+`orderedGroups` (comic groups only), books use `bookGroups`. Back steps through page history;
 group pages have a back arrow.
 
 Read order: per group (`Group.readOrder`), numbered at the top of the group page, drives Up next
@@ -69,13 +71,19 @@ grid stays still, an accent bar marks the drop slot, change applied on release. 
 the long-press (undone if you then drag); a drag needs ~24dp of movement. Shane found live
 reordering during drag and select-on-release both bad; don't go back to them.
 
+Backup (`Backup.kt`): prefs (settings, progress, book_progress, library) + groups.json to
+`Harbour/harbour-backup.json`; auto-saved in `MainActivity.onStop` only when there's data; Restore
+(Settings / welcome screen) restarts the app.
+
 Reading: CBZ, CBR (libarchive, charset forced to UTF-8), PDF books (`PdfRenderer`, read in the
 comic reader, progress as page/pages), EPUB (WebView, CSS-column paging). Reader direction per
-group (LTR, RTL, vertical), one/two/auto pages, fit width, zoom, next issue. Finished items show a
+group (LTR, RTL, vertical, horizontal); the scrolling modes (`ContinuousReader`) zoom by laying
+pages out bigger (scroll stays 1:1), live pinch via graphicsLayer, one-finger cross-axis pan;
+rotation lock button in both readers (`rotationLocked`), one/two/auto pages, fit width, zoom, next issue. Finished items show a
 book-with-tick badge and stay at 100% until Reset progress (reader options / Aa). Progress bars sit
 under covers with a percentage.
 
 Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
 (Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books).
 
-Not yet: grouping books, text selection or footnote links in books, pinch zoom in vertical mode.
+Not yet: text selection or footnote links in books. Shane doesn't want auto-grouping.

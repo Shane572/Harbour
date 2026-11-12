@@ -91,6 +91,8 @@ data class Group(
     val readOrder: List<String> = emptyList(),
     /** The comic whose cover stands for the group; null means its first issue. */
     val coverKey: String? = null,
+    /** Book groups hold books and live on the Books page; comic groups hold comics. */
+    val forBooks: Boolean = false,
 )
 
 data class Progress(val page: Int, val total: Int, val time: Long) {
