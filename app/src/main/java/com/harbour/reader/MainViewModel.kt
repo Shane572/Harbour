@@ -48,6 +48,8 @@ sealed interface Section {
     data object Ungrouped : Section
     data object AllGroups : Section
     data object Gallery : Section
+    data object Guides : Section
+    data class InGuide(val id: String) : Section
     data object WillRead : Section
     data class InGroup(val id: String) : Section
     data object Books : Section
@@ -62,6 +64,8 @@ val Section.stateKey: String
         Section.Ungrouped -> "ungrouped"
         Section.AllGroups -> "groups"
         Section.Gallery -> "gallery"
+        Section.Guides -> "guides"
+        is Section.InGuide -> "guide:$id"
         Section.WillRead -> "will-read"
         is Section.InGroup -> "group:$id"
         Section.Books -> "books"
@@ -295,6 +299,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (ok) Backup.restartApp(app) else message = "Couldn't read the backup file"
         }
     }
+
+    // Reading guides: Shane's own, word for word (assets/guides.json), ticked off as he reads.
+
+    val guides: List<Guide> by lazy { runCatching { Guides.load(getApplication()) }.getOrDefault(emptyList()) }
+
+    fun guideById(id: String): Guide? = guides.firstOrNull { it.id == id }
+
+    private val guideStore = app.getSharedPreferences("guide_progress", Context.MODE_PRIVATE)
+    private val guideDone = mutableStateMapOf<String, Boolean>().apply {
+        guideStore.all.forEach { (k, v) -> if (v == true) put(k, true) }
+    }
+
+    fun isGuideStepDone(g: Guide, index: Int): Boolean = guideDone["${g.id}:$index"] == true
+
+    fun setGuideStepDone(g: Guide, index: Int, done: Boolean) {
+        val key = "${g.id}:$index"
+        if (done) guideDone[key] = true else guideDone.remove(key)
+        guideStore.edit().apply { if (done) putBoolean(key, true) else remove(key) }.apply()
+    }
+
+    fun markGuideReadBefore(g: Guide, index: Int) {
+        g.entries.filter { it < index }.forEach { setGuideStepDone(g, it, true) }
+    }
+
+    /** Steps read, and steps in all. */
+    fun guideProgress(g: Guide): Pair<Int, Int> = g.entries.count { isGuideStepDone(g, it) } to g.entries.size
+
+    /** The library, ready for finding a guide's issues in it. */
+    val guideIndex: List<Guides.Indexed> by derivedStateOf { Guides.index(comics) { groupOfKey[it.key]?.name } }
 
     // The sidebar's list of groups can be folded away.
 
@@ -731,6 +764,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             Section.Ungrouped -> "Ungrouped"
             Section.AllGroups -> "Groups"
             Section.Gallery -> "Gallery"
+            Section.Guides, is Section.InGuide -> null
             Section.AllComics -> "All comics"
             Section.Books -> "Books"
             Section.Home, Section.Settings -> null
@@ -742,6 +776,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Section.Ungrouped -> ungrouped
         Section.AllGroups -> comics.filter { c -> groupOfKey[c.key]?.forBooks == false }
         Section.Gallery -> gallery.mapNotNull { comicsByKey[it.comicKey] }.distinct()
+        Section.Guides, is Section.InGuide -> comics
         Section.Books, is Section.InBookGroup -> emptyList()
         Section.Home, Section.Settings, Section.AllComics -> comics
     }

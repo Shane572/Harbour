@@ -47,6 +47,7 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
 - `ComicArchive.kt` — CBZ via `MiniZip.kt`; CBR via libarchive, unpacked to `cache/cbr` (last 3 kept);
   PDF via Android's `PdfRenderer` (PDFs are books in the library)
 - `EpubBook.kt` — EPUB container/OPF/spine/contents parsing
+- `Guides.kt` — reading guides from `assets/guides.json` and matching their steps to the library
 - `ComicInfo.kt` — ComicInfo.xml inside CBZ/CBR (series, credits, summary) for About this issue
 - `ShownPages.kt` — the reader's view of a comic: trimmed margins (`Trim`), split spreads; maps
   shown pages back to the file's pages, which progress and saved pages always use
@@ -58,7 +59,7 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme,
   `GallerySection` (Gallery page + full-screen `GalleryViewer`), `ComicInfoDialog`
 
-## Current state (build 35)
+## Current state (build 36)
 
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, Gallery, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`); the arrow by the GROUPS heading folds
@@ -103,6 +104,13 @@ Trim margins and Split spreads are global on/off icons in the reader top bar, li
 
 Messages are Harbour's own pill at the bottom (`HarbourRoot`), not Android toasts: on the tablet toasts
 came with a generic Android icon. Build 34 also deletes build 31's leftover voices (`clearOldVoices`).
+
+Guides (sidebar, checklist icon): Saved guides are Shane's own ChatGPT-refined lists (Teen Titans,
+Wally West, JLA, Green Lantern, X-Men, Wonder Woman) stored word for word in `assets/guides.json`;
+only wording/layout was tidied. Don't change their runs, issues or order without asking. Steps tick
+off (`guide_progress` prefs, in the backup); first unticked = Up next; hold a step for "mark
+everything before". Each step shows how many of its issues are in the library (`Guides.match`:
+same matching as search, year in the step picks the volume when files mention it); tap to see them.
 
 Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
 (Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books,

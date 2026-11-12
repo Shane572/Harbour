@@ -127,6 +127,15 @@ fun MainScreen(vm: MainViewModel) {
                     }
                     Section.AllGroups -> AllGroupsSection(vm)
                     Section.Gallery -> GallerySection(vm)
+                    Section.Guides -> GuidesSection(vm)
+                    is Section.InGuide -> {
+                        val guide = vm.guideById(section.id)
+                        if (guide == null) {
+                            LaunchedEffect(section.id) { vm.show(Section.Guides) }
+                        } else {
+                            GuideSection(vm, guide)
+                        }
+                    }
                     Section.Settings -> SettingsSection(vm)
                 }
             }

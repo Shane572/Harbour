@@ -126,6 +126,15 @@ fun Sidebar(vm: MainViewModel) {
             NavItem(painterResource(R.drawable.ic_gallery), "Gallery", section == Section.Gallery, width, labels) {
                 vm.show(Section.Gallery)
             }
+            NavItem(
+                painterResource(R.drawable.ic_guides),
+                "Guides",
+                section == Section.Guides || section is Section.InGuide,
+                width,
+                labels,
+            ) {
+                vm.show(Section.Guides)
+            }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,

@@ -13,7 +13,7 @@ import java.io.File
  * new tablet doesn't lose it. Covers and the library list are rebuilt by a rescan, so they're left out.
  */
 object Backup {
-    private val PREFS = listOf("settings", "progress", "book_progress", "library")
+    private val PREFS = listOf("settings", "progress", "book_progress", "library", "guide_progress")
 
     @Suppress("DEPRECATION")
     fun file(): File = File(Environment.getExternalStorageDirectory(), "Harbour/harbour-backup.json")
