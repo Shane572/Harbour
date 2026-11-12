@@ -6,7 +6,6 @@ import android.content.Context
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,13 +50,6 @@ sealed interface Section {
     data object Gallery : Section
     data object Guides : Section
     data class InGuide(val id: String) : Section
-
-    // Browsing Comic Vine (search, then a character, series, issue or creator page).
-    data object ComicVine : Section
-    data class CvCharacter(val id: Int, val name: String) : Section
-    data class CvSeries(val id: Int, val name: String) : Section
-    data class CvIssue(val id: Int, val name: String) : Section
-    data class CvPerson(val id: Int, val name: String) : Section
     data object WillRead : Section
     data class InGroup(val id: String) : Section
     data object Books : Section
@@ -74,23 +66,11 @@ val Section.stateKey: String
         Section.Gallery -> "gallery"
         Section.Guides -> "guides"
         is Section.InGuide -> "guide:$id"
-        Section.ComicVine -> "cv"
-        is Section.CvCharacter -> "cv-character:$id"
-        is Section.CvSeries -> "cv-series:$id"
-        is Section.CvIssue -> "cv-issue:$id"
-        is Section.CvPerson -> "cv-person:$id"
         Section.WillRead -> "will-read"
         is Section.InGroup -> "group:$id"
         Section.Books -> "books"
         is Section.InBookGroup -> "book-group:$id"
         Section.Settings -> "settings"
-    }
-
-/** The Comic Vine pages, where the search bar searches Comic Vine instead of the library. */
-val Section.isComicVine: Boolean
-    get() = when (this) {
-        Section.ComicVine, is Section.CvCharacter, is Section.CvSeries, is Section.CvIssue, is Section.CvPerson -> true
-        else -> false
     }
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -375,78 +355,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         message = if (comicVineKey.isEmpty()) "Comic Vine key removed" else "Comic Vine key saved"
     }
 
-    // Browsing Comic Vine: the search bar's text on those pages, and pages opened lately.
-
-    var cvQuery by mutableStateOf("")
-        private set
-
-    /** Bumped when Search is pressed, to search straight away rather than waiting for a pause. */
-    var cvSubmits by mutableIntStateOf(0)
-        private set
-
-    fun searchComicVine(q: String) {
-        cvQuery = q
-        if (section.isComicVine && section != Section.ComicVine) show(Section.ComicVine)
-    }
-
-    /** Order for lists of series (search results, a character's series); remembered. */
-    var cvSort by mutableStateOf(enumValueOr(settings.getString("cvSort", null), CvSort.Best))
-        private set
-
-    fun changeCvSort(sort: CvSort) {
-        cvSort = sort
-        settings.edit().putString("cvSort", sort.name).apply()
-    }
-
-    /** A series' issues newest first instead of from #1; remembered. */
-    var cvIssuesNewest by mutableStateOf(settings.getBoolean("cvIssuesNewest", false))
-        private set
-
-    fun changeCvIssuesNewest(newest: Boolean) {
-        cvIssuesNewest = newest
-        settings.edit().putBoolean("cvIssuesNewest", newest).apply()
-    }
-
-    fun submitComicVineSearch() {
-        cvSubmits++
-    }
-
-    private val cvPrefs = app.getSharedPreferences("comicvine", Context.MODE_PRIVATE)
-
-    var cvRecent by mutableStateOf(loadCvRecent())
-        private set
-
-    private fun loadCvRecent(): List<CvRecent> = runCatching {
-        val arr = org.json.JSONArray(cvPrefs.getString("recent", "[]"))
-        (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            CvRecent(o.getString("type"), o.getInt("id"), o.getString("name"), o.optString("image").ifEmpty { null }, o.optString("detail"))
-        }
-    }.getOrDefault(emptyList())
-
-    suspend fun comicVineSavedBytes(): Long = withContext(Dispatchers.IO) { ComicVine.savedBytes(getApplication()) }
-
-    /** Clears saved Comic Vine pages and pictures (not guide covers, and not the key). */
-    fun clearComicVineSaved() {
-        val app = getApplication<Application>()
-        viewModelScope.launch(Dispatchers.IO) { ComicVine.clearSaved(app) }
-        message = "Cleared saved Comic Vine pages"
-    }
-
-    fun noteCvVisit(type: String, id: Int, name: String, image: String?, detail: String) {
-        val r = CvRecent(type, id, name, image, detail)
-        cvRecent = (listOf(r) + cvRecent.filterNot { it.type == type && it.id == id }).take(30)
-        val arr = org.json.JSONArray()
-        cvRecent.forEach {
-            arr.put(
-                org.json.JSONObject()
-                    .put("type", it.type).put("id", it.id).put("name", it.name)
-                    .put("image", it.image ?: "").put("detail", it.detail),
-            )
-        }
-        cvPrefs.edit().putString("recent", arr.toString()).apply()
-    }
-
     suspend fun stepCover(block: GuideBlock): Result<StepCover> =
         withContext(Dispatchers.IO) { runCatching { ComicVine.lookup(getApplication(), block) } }
 
@@ -535,6 +443,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 app.deleteSharedPreferences("bubble_voices")
                 val old = settings.all.keys.filter { it.startsWith("voice") || it == "speechSpeed" }
                 if (old.isNotEmpty()) settings.edit().apply { old.forEach(::remove) }.apply()
+                // Builds 39–41 could browse Comic Vine (since removed): drop the pages and pictures it saved.
+                // Guide covers (filesDir/guide_covers) and the key stay.
+                File(app.filesDir, "cv_cache").deleteRecursively()
+                File(app.cacheDir, "cv_images").deleteRecursively()
+                app.getSharedPreferences("comicvine", Context.MODE_PRIVATE).edit().remove("recent").apply()
+                settings.edit().remove("cvSort").remove("cvIssuesNewest").apply()
             }
         }
     }
@@ -892,7 +806,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             Section.AllGroups -> "Groups"
             Section.Gallery -> "Gallery"
             Section.Guides, is Section.InGuide -> null
-            Section.ComicVine, is Section.CvCharacter, is Section.CvSeries, is Section.CvIssue, is Section.CvPerson -> null
             Section.AllComics -> "All comics"
             Section.Books -> "Books"
             Section.Home, Section.Settings -> null
@@ -905,7 +818,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Section.AllGroups -> comics.filter { c -> groupOfKey[c.key]?.forBooks == false }
         Section.Gallery -> gallery.mapNotNull { comicsByKey[it.comicKey] }.distinct()
         Section.Guides, is Section.InGuide -> comics
-        Section.ComicVine, is Section.CvCharacter, is Section.CvSeries, is Section.CvIssue, is Section.CvPerson -> comics
         Section.Books, is Section.InBookGroup -> emptyList()
         Section.Home, Section.Settings, Section.AllComics -> comics
     }
@@ -991,13 +903,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun back() {
         when {
             backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
-            section == Section.ComicVine && cvQuery.isNotEmpty() -> cvQuery = ""
-            !section.isComicVine && searchQuery.isNotEmpty() -> searchQuery = ""
+            searchQuery.isNotEmpty() -> searchQuery = ""
             section != Section.Home -> section = sectionHistory.removeLastOrNull() ?: Section.Home
         }
     }
 
-    val canGoBack: Boolean get() = backStack.size > 1 || section != Section.Home || searchQuery.isNotEmpty() || cvQuery.isNotEmpty()
+    val canGoBack: Boolean get() = backStack.size > 1 || section != Section.Home || searchQuery.isNotEmpty()
 
     fun openComic(c: Comic) {
         noteOpened(c)

@@ -32,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -173,11 +172,11 @@ fun SettingsSection(vm: MainViewModel) {
         }
 
         item {
-            SettingsCard("Comic Vine") {
+            SettingsCard("Guide covers") {
                 Text(
-                    "Browse Comic Vine (Comic Vine in the left panel) and see covers for guide steps. It needs your " +
-                        "own free Comic Vine API key: sign in at comicvine.gamespot.com/api, copy the key shown there " +
-                        "and paste it here. Pages and covers are kept on the tablet once looked at. The key isn't put " +
+                    "Tap a step in a guide to see the cover of its first issue, from Comic Vine. It needs your own " +
+                        "free Comic Vine API key: sign in at comicvine.gamespot.com/api, copy the key shown there and " +
+                        "paste it here. Each cover is looked up once and then kept on the tablet. The key isn't put " +
                         "in the backup.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = HarbourColors.Muted,
@@ -199,21 +198,6 @@ fun SettingsSection(vm: MainViewModel) {
                     if (vm.comicVineKey.isNotEmpty()) {
                         Text("Key saved", style = MaterialTheme.typography.labelLarge, color = HarbourColors.Muted)
                     }
-                }
-                Spacer(Modifier.height(10.dp))
-                var saved by remember { mutableStateOf<Long?>(null) }
-                LaunchedEffect(Unit) { saved = vm.comicVineSavedBytes() }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Saved pages and pictures: ${saved?.let { String.format(java.util.Locale.getDefault(), "%.1f MB", it / 1_048_576.0) } ?: "…"}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = HarbourColors.Muted,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = {
-                        vm.clearComicVineSaved()
-                        saved = 0L
-                    }) { Text("Clear", color = HarbourColors.Accent) }
                 }
             }
         }
