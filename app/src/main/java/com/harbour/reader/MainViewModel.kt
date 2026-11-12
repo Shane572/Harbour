@@ -4,6 +4,8 @@ import android.app.Application
 import android.app.WallpaperManager
 import android.content.Context
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -13,7 +15,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.harbour.reader.ui.AccentChoice
 import com.harbour.reader.ui.HarbourColors
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -413,6 +420,154 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         pendingStart = c.key to p.page
         openComic(c)
+    }
+
+    // Read aloud: free voices on the tablet (Voices.kt), bubbles found by BubbleFinder
+
+    /** Which voices read: Quick (Piper) or Natural (Kokoro). */
+    var voicePack by mutableStateOf(enumValueOr(settings.getString("voicePack", null), VoicePack.Quick))
+        private set
+
+    /** Packs downloaded on this tablet. */
+    var installedPacks by mutableStateOf(VoicePack.entries.filter { Voices.installed(app, it) }.toSet())
+        private set
+
+    val voicesReady: Boolean get() = voicePack in installedPacks
+
+    /** Download progress 0..1, -1 while unpacking, null when not downloading. */
+    var voiceDownload by mutableStateOf<Float?>(null)
+        private set
+
+    // Voice picks per pack, so switching packs keeps each one's choices.
+    private fun voiceKey(role: VoiceRole, pack: VoicePack) = "voice${role.name}.${pack.name}"
+
+    private fun savedVoice(role: VoiceRole) = settings.getInt(voiceKey(role, voicePack), voicePack.defaultFor(role))
+
+    var narratorVoice by mutableIntStateOf(savedVoice(VoiceRole.Narrator))
+        private set
+    var femaleVoice by mutableIntStateOf(savedVoice(VoiceRole.Female))
+        private set
+    var maleVoice by mutableIntStateOf(savedVoice(VoiceRole.Male))
+        private set
+
+    fun changeVoicePack(pack: VoicePack) {
+        voicePack = pack
+        settings.edit().putString("voicePack", pack.name).apply()
+        narratorVoice = savedVoice(VoiceRole.Narrator)
+        femaleVoice = savedVoice(VoiceRole.Female)
+        maleVoice = savedVoice(VoiceRole.Male)
+    }
+
+    /** The voice speech bubbles start with (captions get the narrator). */
+    var characterVoice by mutableStateOf(enumValueOr(settings.getString("voiceCharacter", null), VoiceRole.Male))
+        private set
+    var speechSpeed by mutableFloatStateOf(settings.getFloat("speechSpeed", 1f))
+        private set
+
+    fun voiceFor(role: VoiceRole): Int = when (role) {
+        VoiceRole.Narrator -> narratorVoice
+        VoiceRole.Female -> femaleVoice
+        VoiceRole.Male -> maleVoice
+    }
+
+    fun changeVoice(role: VoiceRole, id: Int) {
+        when (role) {
+            VoiceRole.Narrator -> narratorVoice = id
+            VoiceRole.Female -> femaleVoice = id
+            VoiceRole.Male -> maleVoice = id
+        }
+        settings.edit().putInt(voiceKey(role, voicePack), id).apply()
+    }
+
+    fun changeCharacterVoice(role: VoiceRole) {
+        characterVoice = role
+        settings.edit().putString("voiceCharacter", role.name).apply()
+    }
+
+    fun changeSpeechSpeed(speed: Float) {
+        speechSpeed = speed
+        settings.edit().putFloat("speechSpeed", speed).apply()
+    }
+
+    // Voices picked for single bubbles while reading, by comic, page and bubble.
+    private val bubbleVoices = app.getSharedPreferences("bubble_voices", Context.MODE_PRIVATE)
+
+    fun bubbleVoice(comicKey: String, page: Int, index: Int): VoiceRole? =
+        bubbleVoices.getString("$comicKey|$page|$index", null)?.let { n -> VoiceRole.entries.firstOrNull { it.name == n } }
+
+    fun setBubbleVoice(comicKey: String, page: Int, index: Int, role: VoiceRole) {
+        bubbleVoices.edit().putString("$comicKey|$page|$index", role.name).apply()
+    }
+
+    fun downloadVoices() {
+        if (voiceDownload != null) return
+        voiceDownload = 0f
+        val app = getApplication<Application>()
+        val pack = voicePack
+        viewModelScope.launch {
+            val error = withContext(Dispatchers.IO) {
+                runCatching { Voices.install(app, pack) { voiceDownload = it } }.exceptionOrNull()
+            }
+            voiceDownload = null
+            installedPacks = VoicePack.entries.filter { Voices.installed(app, it) }.toSet()
+            message = if (error == null) "Voices ready" else "Couldn't get the voices: ${error.message ?: "download failed"}"
+        }
+    }
+
+    fun deleteVoices() {
+        val pack = voicePack
+        if (engine?.pack == pack) {
+            engine?.release()
+            engine = null
+        }
+        Voices.delete(getApplication(), pack)
+        installedPacks = installedPacks - pack
+        message = "Voices deleted"
+    }
+
+    private var engine: VoiceEngine? = null
+    private val engineLock = Mutex()
+
+    val voicesLoaded: Boolean get() = engine?.pack == voicePack
+
+    /** The chosen pack's voice model, loaded the first time it's needed (a few seconds) and kept. */
+    suspend fun voiceEngine(): VoiceEngine = engineLock.withLock {
+        val pack = voicePack
+        engine?.takeIf { it.pack == pack } ?: run {
+            engine?.release()
+            engine = null
+            withContext(Dispatchers.IO) { VoiceEngine.load(getApplication(), pack) }.also { engine = it }
+        }
+    }
+
+    private var sampleJob: Job? = null
+
+    /** Says a line in one voice, for choosing voices in Settings. */
+    fun playSample(id: Int) {
+        sampleJob?.cancel()
+        sampleJob = viewModelScope.launch {
+            if (!voicesLoaded) message = "Getting the voices ready…"
+            var player: SpeechPlayer? = null
+            try {
+                val e = voiceEngine()
+                val audio = withContext(Dispatchers.Default) {
+                    e.speak("This is how I'll sound reading your comics.", id, speechSpeed)
+                }
+                player = SpeechPlayer(e.sampleRate)
+                player.play(audio, MutableStateFlow(false))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                message = "Couldn't play that voice"
+            } finally {
+                player?.release()
+            }
+        }
+    }
+
+    override fun onCleared() {
+        engine?.release()
+        engine = null
     }
 
     /** [which] is WallpaperManager.FLAG_SYSTEM (home screen), FLAG_LOCK, or both. */

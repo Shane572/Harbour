@@ -49,6 +49,10 @@ android {
     buildFeatures {
         compose = true
     }
+    // Compress the native libraries (voices, text recognition) so updates download smaller.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
 }
 
 dependencies {
@@ -67,4 +71,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     // libarchive, for CBR (RAR and RAR5) comics
     implementation("me.zhanghai.android.libarchive:library:1.1.4")
+    // Read aloud: free offline voices (sherpa-onnx running Kokoro) and on-device text recognition
+    implementation(files("libs/sherpa-onnx-static-link-onnxruntime-1.13.8.aar"))
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }

@@ -60,6 +60,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import android.graphics.RectF
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import com.harbour.reader.ReadAloud
+import com.harbour.reader.VoiceRole
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
@@ -265,6 +279,31 @@ private fun ReaderPages(
     var showAbout by remember { mutableStateOf(false) }
     var zoomed by remember { mutableStateOf(false) }
     val next = remember(comic.key) { if (book != null) null else vm.nextComic(comic) }
+    val readAloud = remember(comic.key) { ReadAloud(vm, comic.key, archive, scope) }
+    DisposableEffect(readAloud) { onDispose { readAloud.stop() } }
+    readAloud.rtl = mode == ReadingMode.RightToLeft
+    val highlightColor = HarbourColors.Accent
+
+    // The bubble being read, as 0..1 of shown page [i] (which may be trimmed or half a spread).
+    val highlightAt: (Int) -> RectF? = { i ->
+        val b = readAloud.current
+        if (!readAloud.active || b == null || pages.sourceOf(i) != readAloud.page) {
+            null
+        } else {
+            val c = pages.cropOf(i)
+            val r = b.box
+            if (!RectF.intersects(c, r)) {
+                null
+            } else {
+                RectF(
+                    (r.left - c.left) / c.width(),
+                    (r.top - c.top) / c.height(),
+                    (r.right - c.left) / c.width(),
+                    (r.bottom - c.top) / c.height(),
+                )
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         delay(2200)
@@ -301,6 +340,53 @@ private fun ReaderPages(
         // Recreated when the layout changes, starting from the page you were on.
         val pager: PagerState = key(spreads) { rememberPagerState(initialPage = spreadOf(page)) { spreads.size } }
         val list: LazyListState = key(mode, pages) { rememberLazyListState(initialFirstVisibleItemIndex = page) }
+        // The file's pages on screen now: one, or two side by side.
+        val visible = if (mode.continuous) {
+            listOf(pages.sourceOf(page))
+        } else {
+            spreads[pager.currentPage.coerceIn(0, spreads.lastIndex)].map { pages.sourceOf(it) }.distinct().sorted()
+        }
+
+        // Every file page with any part on screen (a long strip can show the end of one page and
+        // the start of the next). Only changes when that set does, not on every scroll.
+        val onScreen by remember(list, pages, mode.continuous) {
+            derivedStateOf {
+                if (mode.continuous) {
+                    list.layoutInfo.visibleItemsInfo.map { it.index }.filter { it < pages.pageCount }
+                        .map { pages.sourceOf(it) }.distinct()
+                } else {
+                    emptyList()
+                }
+            }
+        }
+
+        // Read aloud turns the pages itself; if you turn them by hand, it follows you.
+        val showing = if (mode.continuous && onScreen.isNotEmpty()) onScreen else visible
+        LaunchedEffect(showing) {
+            if (readAloud.active && readAloud.page >= 0 && readAloud.page !in showing) readAloud.start(visible.first())
+        }
+        readAloud.onShow = { p, bubble ->
+            val target = pages.indexFor(p, bubble?.box?.centerX())
+            scope.launch {
+                if (mode.continuous) {
+                    val vertical = mode == ReadingMode.Vertical
+                    val info = list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == target }
+                    val rel = highlightAt(target)
+                    if (info == null) {
+                        list.animateScrollToItem(target)
+                    } else if (rel != null) {
+                        // Keep the bubble on screen down a long strip.
+                        val view = if (vertical) list.layoutInfo.viewportSize.height else list.layoutInfo.viewportSize.width
+                        val at = info.offset + (if (vertical) rel.top else rel.left) * info.size
+                        if (at < 0 || at > view * 0.7f) list.animateScrollBy(at - view * 0.2f)
+                    }
+                } else {
+                    val spread = spreadOf(target)
+                    if (pager.currentPage != spread) pager.animateScrollToPage(spread)
+                }
+            }
+        }
+
         val atEnd = if (mode.continuous) {
             !list.canScrollForward && list.layoutInfo.totalItemsCount > 0
         } else {
@@ -318,6 +404,8 @@ private fun ReaderPages(
             key(mode, pages) {
                 ContinuousReader(
                     archive = pages,
+                    highlight = highlightAt,
+                    highlightColor = highlightColor,
                     state = list,
                     vertical = vertical,
                     next = next,
@@ -358,6 +446,8 @@ private fun ReaderPages(
             ) { index ->
                 ZoomableSpread(
                     archive = pages,
+                    highlight = highlightAt,
+                    highlightColor = highlightColor,
                     pages = spreads[index],
                     rtl = rtl,
                     fitWidth = vm.fitWidth && spreads[index].size == 1,
@@ -384,11 +474,15 @@ private fun ReaderPages(
             onToggleRotation = vm::toggleRotationLock,
         ) {
             if (book == null) {
-                // The file's pages on screen now: one, or two side by side.
-                val visible = if (mode.continuous) {
-                    listOf(pages.sourceOf(page))
-                } else {
-                    spreads[pager.currentPage.coerceIn(0, spreads.lastIndex)].map { pages.sourceOf(it) }.distinct().sorted()
+                ToggleIcon(R.drawable.ic_read_aloud, "Read aloud", readAloud.active) {
+                    when {
+                        readAloud.active -> readAloud.stop()
+                        !vm.voicesReady -> vm.message = "Download the voices first, in Settings → Read aloud"
+                        else -> {
+                            readAloud.start(visible.first())
+                            showUi = false
+                        }
+                    }
                 }
                 SavePageButton(vm, comic.key, visible) { p ->
                     val saved = vm.savedPage(comic.key, p)
@@ -438,6 +532,15 @@ private fun ReaderPages(
                 onFitWidth = vm::changeFitWidth,
                 finished = keepFinished,
                 onReset = ::resetProgress,
+            )
+        }
+        if (readAloud.active) {
+            ReadAloudBar(
+                readAloud,
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .padding(start = 16.dp, end = 16.dp, bottom = if (showUi) 128.dp else 20.dp),
             )
         }
         if (showAbout) ComicInfoDialog(vm, comic, onDismiss = { showAbout = false })
@@ -719,6 +822,8 @@ private fun PageSpinner(modifier: Modifier) {
 @Composable
 private fun ContinuousReader(
     archive: ComicArchive,
+    highlight: (Int) -> RectF?,
+    highlightColor: Color,
     state: LazyListState,
     vertical: Boolean,
     next: Comic?,
@@ -823,7 +928,7 @@ private fun ContinuousReader(
         if (vertical) {
             LazyColumn(state = state, modifier = strip) {
                 items(archive.pageCount, key = { it }) { index ->
-                    StripPage(archive, index, vertical = true)
+                    StripPage(archive, index, vertical = true, highlight = highlight(index), highlightColor = highlightColor)
                 }
                 if (next != null) {
                     item(key = "next") {
@@ -836,7 +941,7 @@ private fun ContinuousReader(
         } else {
             LazyRow(state = state, modifier = strip) {
                 items(archive.pageCount, key = { it }) { index ->
-                    StripPage(archive, index, vertical = false)
+                    StripPage(archive, index, vertical = false, highlight = highlight(index), highlightColor = highlightColor)
                 }
                 if (next != null) {
                     item(key = "next") {
@@ -852,7 +957,7 @@ private fun ContinuousReader(
 
 /** One page of the strip: full width when stacked, full height when side by side. */
 @Composable
-private fun StripPage(archive: ComicArchive, index: Int, vertical: Boolean) {
+private fun StripPage(archive: ComicArchive, index: Int, vertical: Boolean, highlight: RectF?, highlightColor: Color) {
     val fill = if (vertical) Modifier.fillMaxWidth() else Modifier.fillMaxHeight()
     val bmp = rememberPage(archive, index, PAGE_PIXELS)
     if (bmp == null) {
@@ -863,7 +968,9 @@ private fun StripPage(archive: ComicArchive, index: Int, vertical: Boolean) {
             contentDescription = "Page ${index + 1}",
             contentScale = if (vertical) ContentScale.FillWidth else ContentScale.FillHeight,
             filterQuality = FilterQuality.High,
-            modifier = fill.aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1)),
+            modifier = fill
+                .aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1))
+                .bubbleHighlight(highlight, bmp.width.toFloat() / bmp.height.coerceAtLeast(1), Alignment.Center, highlightColor),
         )
     }
 }
@@ -872,6 +979,8 @@ private fun StripPage(archive: ComicArchive, index: Int, vertical: Boolean) {
 @Composable
 private fun ZoomableSpread(
     archive: ComicArchive,
+    highlight: (Int) -> RectF?,
+    highlightColor: Color,
     pages: IntArray,
     rtl: Boolean,
     fitWidth: Boolean,
@@ -1008,8 +1117,8 @@ private fun ZoomableSpread(
                 // Left page hugs the spine on its right, and vice versa. Manga reads right page first.
                 val (left, right) = if (rtl) pages[1] to pages[0] else pages[0] to pages[1]
                 Row(Modifier.fillMaxSize().then(layer)) {
-                    SpreadPage(archive, left, Alignment.CenterEnd, Modifier.weight(1f).fillMaxHeight())
-                    SpreadPage(archive, right, Alignment.CenterStart, Modifier.weight(1f).fillMaxHeight())
+                    SpreadPage(archive, left, Alignment.CenterEnd, Modifier.weight(1f).fillMaxHeight(), highlight = highlight(left), highlightColor = highlightColor)
+                    SpreadPage(archive, right, Alignment.CenterStart, Modifier.weight(1f).fillMaxHeight(), highlight = highlight(right), highlightColor = highlightColor)
                 }
             }
             fitWidth -> {
@@ -1031,12 +1140,26 @@ private fun ZoomableSpread(
                             filterQuality = FilterQuality.High,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1)),
+                                .aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1))
+                                .bubbleHighlight(
+                                    highlight(pages[0]),
+                                    bmp.width.toFloat() / bmp.height.coerceAtLeast(1),
+                                    Alignment.Center,
+                                    highlightColor,
+                                ),
                         )
                     }
                 }
             }
-            else -> SpreadPage(archive, pages[0], Alignment.Center, Modifier.fillMaxSize().then(layer), PAGE_PIXELS)
+            else -> SpreadPage(
+                archive,
+                pages[0],
+                Alignment.Center,
+                Modifier.fillMaxSize().then(layer),
+                PAGE_PIXELS,
+                highlight = highlight(pages[0]),
+                highlightColor = highlightColor,
+            )
         }
     }
 }
@@ -1048,6 +1171,8 @@ private fun SpreadPage(
     alignment: Alignment,
     modifier: Modifier,
     maxPixels: Long = PAGE_PIXELS / 2,
+    highlight: RectF? = null,
+    highlightColor: Color = Color.Unspecified,
 ) {
     val bmp = rememberPage(archive, index, maxPixels)
     if (bmp == null) {
@@ -1059,8 +1184,95 @@ private fun SpreadPage(
             contentScale = ContentScale.Fit,
             alignment = alignment,
             filterQuality = FilterQuality.High,
-            modifier = modifier,
+            modifier = modifier.bubbleHighlight(highlight, bmp.width.toFloat() / bmp.height.coerceAtLeast(1), alignment, highlightColor),
         )
+    }
+}
+
+/** Outlines the bubble being read aloud. [rect] is 0..1 of the picture, which is fitted into this box. */
+private fun Modifier.bubbleHighlight(rect: RectF?, aspect: Float, alignment: Alignment, color: Color): Modifier =
+    if (rect == null || aspect <= 0f) {
+        this
+    } else {
+        drawWithContent {
+            drawContent()
+            val drawW = minOf(size.width, size.height * aspect)
+            val drawH = drawW / aspect
+            val at = alignment.align(
+                IntSize(drawW.roundToInt(), drawH.roundToInt()),
+                IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                layoutDirection,
+            )
+            val pad = 6.dp.toPx()
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(at.x + rect.left * drawW - pad, at.y + rect.top * drawH - pad),
+                size = Size(rect.width() * drawW + pad * 2, rect.height() * drawH + pad * 2),
+                cornerRadius = CornerRadius(10.dp.toPx()),
+                style = Stroke(3.dp.toPx()),
+            )
+        }
+    }
+
+/** Controls while reading aloud: back a line, pause, forward a line, what's being read, its voice, stop. */
+@Composable
+private fun ReadAloudBar(ra: ReadAloud, modifier: Modifier) {
+    var menu by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .widthIn(max = 760.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color.Black.copy(alpha = 0.84f))
+            // Swallow taps so they don't turn the page underneath.
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    ) {
+        IconButton(onClick = ra::previous) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous line", tint = Color.White)
+        }
+        IconButton(onClick = ra::togglePause) {
+            if (ra.paused) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = "Carry on reading", tint = Color.White)
+            } else {
+                Icon(painterResource(R.drawable.ic_pause), contentDescription = "Pause", tint = Color.White)
+            }
+        }
+        IconButton(onClick = ra::next) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next line", tint = Color.White)
+        }
+        Text(
+            ra.status ?: ra.current?.text ?: "",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (ra.status != null) Color.White.copy(alpha = 0.6f) else Color.White,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp),
+        )
+        Box {
+            val role = ra.currentRole
+            TextButton(onClick = { menu = true }, enabled = role != null && ra.status == null) {
+                Text(role?.label ?: "Voice", color = if (role != null) HarbourColors.Accent else Color.White.copy(alpha = 0.4f))
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = Color.White.copy(alpha = 0.6f))
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                VoiceRole.entries.forEach { r ->
+                    DropdownMenuItem(
+                        text = { Text(if (r == role) "${r.label}  ✓" else r.label) },
+                        onClick = {
+                            menu = false
+                            ra.changeVoice(r)
+                        },
+                    )
+                }
+            }
+        }
+        IconButton(onClick = ra::stop) {
+            Icon(Icons.Filled.Close, contentDescription = "Stop reading aloud", tint = Color.White)
+        }
     }
 }
 
