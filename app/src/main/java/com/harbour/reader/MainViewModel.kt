@@ -1,6 +1,7 @@
 package com.harbour.reader
 
 import android.app.Application
+import android.app.WallpaperManager
 import android.content.Context
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -16,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 
 /** Full-screen places. The library itself is one screen with a sidebar of [Section]s. */
@@ -24,12 +27,16 @@ sealed interface Screen {
     data class Reader(val comic: Comic) : Screen
     data class BookReader(val book: Book) : Screen
     data object Browse : Screen
+
+    /** Saved pages full screen, starting at [start]; [files] picks which (and in what order). */
+    data class GalleryView(val files: List<String>, val start: Int) : Screen
 }
 
 val Screen.stateKey: String
     get() = when (this) {
         Screen.Main -> "main"
         Screen.Browse -> "browse"
+        is Screen.GalleryView -> "gallery-view"
         is Screen.Reader -> "reader:${comic.key}"
         is Screen.BookReader -> "book-reader:${book.key}"
     }
@@ -40,6 +47,7 @@ sealed interface Section {
     data object AllComics : Section
     data object Ungrouped : Section
     data object AllGroups : Section
+    data object Gallery : Section
     data object WillRead : Section
     data class InGroup(val id: String) : Section
     data object Books : Section
@@ -53,6 +61,7 @@ val Section.stateKey: String
         Section.AllComics -> "all"
         Section.Ungrouped -> "ungrouped"
         Section.AllGroups -> "groups"
+        Section.Gallery -> "gallery"
         Section.WillRead -> "will-read"
         is Section.InGroup -> "group:$id"
         Section.Books -> "books"
@@ -298,6 +307,127 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         message = if (rotationLocked) "Rotation locked" else "Rotation unlocked"
     }
 
+    // Page tweaks while reading, toggled from the reader's top bar: trim plain margins, and
+    // split two-page spreads into halves.
+
+    var trimMargins by mutableStateOf(settings.getBoolean("trimMargins", false))
+        private set
+    var splitSpreads by mutableStateOf(settings.getBoolean("splitSpreads", false))
+        private set
+
+    fun toggleTrimMargins() {
+        trimMargins = !trimMargins
+        settings.edit().putBoolean("trimMargins", trimMargins).apply()
+        message = if (trimMargins) "Trimming page margins" else "Showing pages as they are"
+    }
+
+    fun toggleSplitSpreads() {
+        splitSpreads = !splitSpreads
+        settings.edit().putBoolean("splitSpreads", splitSpreads).apply()
+        message = if (splitSpreads) "Splitting two-page spreads" else "Keeping spreads whole"
+    }
+
+    // Which pages of a comic are spreads: worked out once per comic while Harbour is open.
+    private val spreadCache = ConcurrentHashMap<String, BooleanArray>()
+
+    fun spreadsOf(c: Comic, archive: ComicArchive): BooleanArray =
+        spreadCache.getOrPut(c.key) { ShownPages.findSpreads(archive) }
+
+    // Issue details from inside the file (ComicInfo.xml), read when first asked for.
+    private val infoCache = HashMap<String, ComicInfo?>()
+
+    suspend fun comicInfo(c: Comic): ComicInfo? {
+        if (infoCache.containsKey(c.key)) return infoCache[c.key]
+        val info = withContext(Dispatchers.IO) { ComicInfo.read(c.file) }
+        infoCache[c.key] = info
+        return info
+    }
+
+    // Gallery: pages saved from the reader (pictures in Harbour/Gallery)
+
+    var gallery by mutableStateOf<List<SavedPage>>(emptyList())
+        private set
+
+    fun loadGallery() {
+        viewModelScope.launch {
+            gallery = withContext(Dispatchers.IO) { runCatching { GalleryStore.load() }.getOrDefault(emptyList()) }
+        }
+    }
+
+    fun savedPage(key: String, page: Int): SavedPage? = gallery.firstOrNull { it.comicKey == key && it.page == page }
+
+    /** Saves a page of the open comic at wallpaper quality (trimmed, if trimming is on). */
+    fun savePage(c: Comic, archive: ComicArchive, page: Int, pages: Int) {
+        if (savedPage(c.key, page) != null) return
+        val group = groupOfKey[c.key]?.name
+        val trim = trimMargins
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bmp = archive.decodePage(page, 8_000_000L) ?: error("Couldn't decode the page")
+                    GalleryStore.write(if (trim) Trim.margins(bmp) else bmp, c, group, page, pages)
+                }.getOrNull()
+            }
+            if (saved == null) {
+                message = "Couldn't save that page"
+                return@launch
+            }
+            gallery = listOf(saved) + gallery
+            val list = gallery
+            withContext(Dispatchers.IO) { runCatching { GalleryStore.save(list) } }
+            message = "Saved page ${page + 1} to your gallery"
+        }
+    }
+
+    /** Takes a page out of the gallery and deletes its picture. The comic isn't touched. */
+    fun removeSaved(p: SavedPage) {
+        gallery = gallery.filter { it.file != p.file }
+        val list = gallery
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                GalleryStore.imageOf(p).delete()
+                GalleryStore.save(list)
+            }
+        }
+        message = "Removed from your gallery"
+    }
+
+    fun openGallery(list: List<SavedPage>, start: Int) {
+        backStack.add(Screen.GalleryView(list.map { it.file }, start))
+    }
+
+    // Set by Read from here in the gallery, so the reader starts on that page.
+    private var pendingStart: Pair<String, Int>? = null
+
+    fun takePendingStart(c: Comic): Int? {
+        val p = pendingStart
+        pendingStart = null
+        return p?.takeIf { it.first == c.key }?.second
+    }
+
+    fun readFrom(p: SavedPage) {
+        val c = comicsByKey[p.comicKey]
+        if (c == null) {
+            message = "That comic isn't in your library any more"
+            return
+        }
+        pendingStart = c.key to p.page
+        openComic(c)
+    }
+
+    /** [which] is WallpaperManager.FLAG_SYSTEM (home screen), FLAG_LOCK, or both. */
+    fun setWallpaper(p: SavedPage, which: Int) {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    FileInputStream(GalleryStore.imageOf(p)).use { WallpaperManager.getInstance(app).setStream(it, null, true, which) }
+                }.isSuccess
+            }
+            message = if (ok) "Wallpaper set" else "Couldn't set the wallpaper"
+        }
+    }
+
     // Updates
 
     private val updater = Updater(app)
@@ -313,6 +443,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             settings.edit().putBoolean("groupsOrdered", true).apply()
         }
         if (roots.isNotEmpty()) rescan()
+        loadGallery()
         checkForUpdate(quiet = true)
     }
 
@@ -556,6 +687,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             Section.WillRead -> "Will Read"
             Section.Ungrouped -> "Ungrouped"
             Section.AllGroups -> "Groups"
+            Section.Gallery -> "Gallery"
             Section.AllComics -> "All comics"
             Section.Books -> "Books"
             Section.Home, Section.Settings -> null
@@ -566,6 +698,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Section.WillRead -> willRead
         Section.Ungrouped -> ungrouped
         Section.AllGroups -> comics.filter { c -> groupOfKey[c.key]?.forBooks == false }
+        Section.Gallery -> gallery.mapNotNull { comicsByKey[it.comicKey] }.distinct()
         Section.Books, is Section.InBookGroup -> emptyList()
         Section.Home, Section.Settings, Section.AllComics -> comics
     }

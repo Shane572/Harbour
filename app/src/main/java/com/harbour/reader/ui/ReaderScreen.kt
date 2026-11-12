@@ -60,6 +60,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.res.painterResource
+import com.harbour.reader.R
+import com.harbour.reader.ShownPages
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -194,14 +202,67 @@ private fun buildSpreads(count: Int, double: Boolean): List<IntArray> =
 
 @Composable
 private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive, book: Book?) {
-    val count = archive.pageCount
-    val scope = rememberCoroutineScope()
+    val sourceCount = archive.pageCount
     var mode by remember(comic.key) { mutableStateOf(vm.readingMode(comic)) }
-    var page by remember(comic.key) {
-        mutableIntStateOf(if (book != null) vm.pdfStartPage(book, count) else vm.startPage(comic, count))
+    // Where you are in the file itself. Shown pages (margins trimmed, spreads split in two) are
+    // worked out from it, so progress and saved pages never depend on those toggles.
+    var sourcePage by remember(comic.key) {
+        mutableIntStateOf(
+            vm.takePendingStart(comic)?.coerceIn(0, sourceCount - 1)
+                ?: if (book != null) vm.pdfStartPage(book, sourceCount) else vm.startPage(comic, sourceCount),
+        )
     }
+    val rtl = mode == ReadingMode.RightToLeft
+    val trim = vm.trimMargins
+    val split = vm.splitSpreads
+    val shown by produceState<ShownPages?>(null, archive, trim, split, rtl) {
+        value = withContext(Dispatchers.IO) {
+            val wide = if (split) runCatching { vm.spreadsOf(comic, archive) }.getOrNull() else null
+            ShownPages.build(archive, trim, wide, rtl)
+        }
+    }
+    val pages = shown
+    if (pages == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(Modifier.size(32.dp), color = HarbourColors.Accent, strokeWidth = 2.dp)
+        }
+    } else {
+        ReaderPages(
+            vm = vm,
+            comic = comic,
+            archive = archive,
+            pages = pages,
+            book = book,
+            mode = mode,
+            onMode = {
+                mode = it
+                vm.setReadingMode(comic, it)
+            },
+            sourcePage = sourcePage,
+            onSourcePage = { sourcePage = it },
+        )
+    }
+}
+
+@Composable
+private fun ReaderPages(
+    vm: MainViewModel,
+    comic: Comic,
+    archive: ComicArchive,
+    pages: ShownPages,
+    book: Book?,
+    mode: ReadingMode,
+    onMode: (ReadingMode) -> Unit,
+    sourcePage: Int,
+    onSourcePage: (Int) -> Unit,
+) {
+    val count = pages.pageCount
+    val sourceCount = archive.pageCount
+    val scope = rememberCoroutineScope()
+    var page by remember(pages) { mutableIntStateOf(pages.indexOf(sourcePage)) }
     var showUi by remember { mutableStateOf(true) }
     var showOptions by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     var zoomed by remember { mutableStateOf(false) }
     val next = remember(comic.key) { if (book != null) null else vm.nextComic(comic) }
 
@@ -218,8 +279,10 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
 
     fun onPageShown(p: Int) {
         page = p
+        val source = pages.sourceOf(p)
+        onSourcePage(source)
         if (keepFinished) return
-        if (book != null) vm.savePdfProgress(book, p, count) else vm.saveProgress(comic, p, count)
+        if (book != null) vm.savePdfProgress(book, source, sourceCount) else vm.saveProgress(comic, source, sourceCount)
     }
 
     fun resetProgress() {
@@ -237,7 +300,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
 
         // Recreated when the layout changes, starting from the page you were on.
         val pager: PagerState = key(spreads) { rememberPagerState(initialPage = spreadOf(page)) { spreads.size } }
-        val list: LazyListState = key(mode) { rememberLazyListState(initialFirstVisibleItemIndex = page) }
+        val list: LazyListState = key(mode, pages) { rememberLazyListState(initialFirstVisibleItemIndex = page) }
         val atEnd = if (mode.continuous) {
             !list.canScrollForward && list.layoutInfo.totalItemsCount > 0
         } else {
@@ -252,9 +315,9 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
             val vertical = mode == ReadingMode.Vertical
             // A screenful (less a little overlap) along the strip, for the side taps.
             val step = (if (vertical) constraints.maxHeight else constraints.maxWidth) * 0.8f
-            key(mode) {
+            key(mode, pages) {
                 ContinuousReader(
-                    archive = archive,
+                    archive = pages,
                     state = list,
                     vertical = vertical,
                     next = next,
@@ -294,7 +357,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
                 key = { it },
             ) { index ->
                 ZoomableSpread(
-                    archive = archive,
+                    archive = pages,
                     pages = spreads[index],
                     rtl = rtl,
                     fitWidth = vm.fitWidth && spreads[index].size == 1,
@@ -319,7 +382,25 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
             onOptions = { showOptions = !showOptions },
             rotationLocked = vm.rotationLocked,
             onToggleRotation = vm::toggleRotationLock,
-        )
+        ) {
+            if (book == null) {
+                // The file's pages on screen now: one, or two side by side.
+                val visible = if (mode.continuous) {
+                    listOf(pages.sourceOf(page))
+                } else {
+                    spreads[pager.currentPage.coerceIn(0, spreads.lastIndex)].map { pages.sourceOf(it) }.distinct().sorted()
+                }
+                SavePageButton(vm, comic.key, visible) { p ->
+                    val saved = vm.savedPage(comic.key, p)
+                    if (saved != null) vm.removeSaved(saved) else vm.savePage(comic, archive, p, sourceCount)
+                }
+                IconButton(onClick = { showAbout = true }) {
+                    Icon(Icons.Outlined.Info, contentDescription = "About this issue", tint = Color.White)
+                }
+            }
+            ToggleIcon(R.drawable.ic_trim, "Trim margins", vm.trimMargins, vm::toggleTrimMargins)
+            ToggleIcon(R.drawable.ic_split, "Split two-page spreads", vm.splitSpreads, vm::toggleSplitSpreads)
+        }
 
         BottomBar(
             visible = showUi,
@@ -352,16 +433,14 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
                 mode = mode,
                 layout = vm.pageLayout,
                 fitWidth = vm.fitWidth,
-                onMode = {
-                    mode = it
-                    vm.setReadingMode(comic, it)
-                },
+                onMode = onMode,
                 onLayout = vm::changePageLayout,
                 onFitWidth = vm::changeFitWidth,
                 finished = keepFinished,
                 onReset = ::resetProgress,
             )
         }
+        if (showAbout) ComicInfoDialog(vm, comic, onDismiss = { showAbout = false })
     }
 }
 
@@ -374,6 +453,7 @@ private fun TopBar(
     onOptions: () -> Unit,
     rotationLocked: Boolean,
     onToggleRotation: () -> Unit,
+    actions: @Composable () -> Unit,
 ) {
     AnimatedVisibility(visible = visible, enter = fadeIn(tween(180)), exit = fadeOut(tween(180))) {
         Row(
@@ -403,11 +483,48 @@ private fun TopBar(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            actions()
             RotationLockButton(rotationLocked, onToggleRotation)
             IconButton(onClick = onOptions) {
                 Icon(Icons.Filled.Settings, contentDescription = "Reading options", tint = Color.White)
             }
         }
+    }
+}
+
+/** Saves the page on screen to the gallery (or takes it out). With two pages showing, asks which. */
+@Composable
+private fun SavePageButton(vm: MainViewModel, comicKey: String, visible: List<Int>, onToggle: (Int) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val anySaved = visible.any { vm.savedPage(comicKey, it) != null }
+    Box {
+        IconButton(onClick = { if (visible.size == 1) onToggle(visible[0]) else menu = true }) {
+            Icon(
+                if (anySaved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = "Save page to gallery",
+                tint = if (anySaved) HarbourColors.Accent else Color.White,
+            )
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            visible.forEach { p ->
+                val saved = vm.savedPage(comicKey, p) != null
+                DropdownMenuItem(
+                    text = { Text(if (saved) "Remove page ${p + 1} from gallery" else "Save page ${p + 1} to gallery") },
+                    onClick = {
+                        menu = false
+                        onToggle(p)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** An on/off button in the reader's top bar, lit in the accent colour when on (like rotation lock). */
+@Composable
+private fun ToggleIcon(icon: Int, label: String, on: Boolean, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle) {
+        Icon(painterResource(icon), contentDescription = label, tint = if (on) HarbourColors.Accent else Color.White)
     }
 }
 

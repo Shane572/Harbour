@@ -105,6 +105,7 @@ fun ComicsSection(
     var selected by remember { mutableStateOf(emptySet<String>()) }
     var picking by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var about by remember { mutableStateOf<Comic?>(null) }
     val selecting = selected.isNotEmpty()
     val shown = remember(comics, vm.sort, presorted) { if (presorted) comics else vm.sorted(comics) }
     // Dragging on a group page: hold an issue, then drag it within, into or out of the read order.
@@ -135,6 +136,12 @@ fun ComicsSection(
     val addsToOrder = group != null && selected.any { it !in inOrder }
     val actions = buildList<Pair<String, () -> Unit>> {
         add("Select all" to { selected = shown.map { it.key }.toSet() })
+        selected.singleOrNull()?.let { vm.comicsByKey[it] }?.let { c ->
+            add("About this issue" to {
+                about = c
+                done()
+            })
+        }
         if (group != null) {
             if (addsToOrder) add("Add to group" to { picking = true })
             if (selected.any { it in inOrder }) {
@@ -179,6 +186,8 @@ fun ComicsSection(
         })
         add("Delete from device…" to { confirmDelete = true })
     }
+
+    about?.let { c -> ComicInfoDialog(vm, c, onDismiss = { about = null }) }
 
     Column(Modifier.fillMaxSize()) {
         Box(

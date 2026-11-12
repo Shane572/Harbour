@@ -126,6 +126,7 @@ fun MainScreen(vm: MainViewModel) {
                         }
                     }
                     Section.AllGroups -> AllGroupsSection(vm)
+                    Section.Gallery -> GallerySection(vm)
                     Section.Settings -> SettingsSection(vm)
                 }
             }

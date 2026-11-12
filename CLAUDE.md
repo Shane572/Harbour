@@ -47,14 +47,19 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
 - `ComicArchive.kt` — CBZ via `MiniZip.kt`; CBR via libarchive, unpacked to `cache/cbr` (last 3 kept);
   PDF via Android's `PdfRenderer` (PDFs are books in the library)
 - `EpubBook.kt` — EPUB container/OPF/spine/contents parsing
+- `ComicInfo.kt` — ComicInfo.xml inside CBZ/CBR (series, credits, summary) for About this issue
+- `ShownPages.kt` — the reader's view of a comic: trimmed margins (`Trim`), split spreads; maps
+  shown pages back to the file's pages, which progress and saved pages always use
+- `GalleryStore.kt` — saved pages: JPEGs + `gallery.json` in `Harbour/Gallery` (outlive the app)
 - `CoverCache.kt`, `ProgressStore.kt` (comics + books), `Updater.kt`, `StorageAccess.kt`, `HarbourApp.kt`
 - `ui/` — `LibraryScreen` (main layout, Home, welcome), `Sidebar`, `ComicsSection` (grids,
   selection, Add to group), `BooksSection`, `SettingsSection`, `ReaderScreen` (paged / two-page /
-  vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme
+  vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme,
+  `GallerySection` (Gallery page + full-screen `GalleryViewer`), `ComicInfoDialog`
 
-## Current state (build 28)
+## Current state (build 30)
 
-Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, groups, Books, Settings) with
+Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, Gallery, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`). Groups are made by hand
 (long-press to select, Add to group); one group per comic; `Group.coverKey` = Set as group cover.
 Home: Continue reading, 3 groups (most recently read first), Recently added. Tapping the sidebar
@@ -84,7 +89,20 @@ rotation lock button in both readers (`rotationLocked`), one/two/auto pages, fit
 book-with-tick badge and stay at 100% until Reset progress (reader options / Aa). Progress bars sit
 under covers with a percentage.
 
-Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
-(Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books).
+Gallery: heart in the reader's top bar saves the page (spreads ask which page) at ~8 MP, trimmed if
+trimming is on. Gallery page is a staggered wall of saved pages, filter by group; tap for the
+full-screen viewer (swipe, zoom) with Read from here (`vm.readFrom`, `takePendingStart`), About this
+issue, Set as wallpaper (home / lock / both) and Remove. About this issue is also the reader's info
+button and a one-comic selection action.
 
-Not yet: text selection or footnote links in books. Shane doesn't want auto-grouping.
+Trim margins and Split spreads are global on/off icons in the reader top bar, like rotation lock
+(`trimMargins`, `splitSpreads`). Spread detection reads every page's size once per comic
+(`spreadsOf`, cached); the cover is never split; RTL shows the right half first.
+
+Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
+(Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books,
+framed picture for Gallery, page-pulled-in for Trim, dashed-cut spread for Split).
+
+Not yet: text selection or footnote links in books. Shane doesn't want auto-grouping. He asked
+about AI character voices reading comics aloud: possible only online (vision model reads bubbles and
+speakers, paid TTS voices per character); not started.

@@ -32,6 +32,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.harbour.reader.ui.BookReaderScreen
 import com.harbour.reader.ui.CrashReportDialog
 import com.harbour.reader.ui.FolderBrowserScreen
+import com.harbour.reader.ui.GalleryViewer
 import com.harbour.reader.ui.HarbourTheme
 import com.harbour.reader.ui.LocalCovers
 import com.harbour.reader.ui.MainScreen
@@ -73,7 +74,7 @@ fun HarbourRoot(vm: MainViewModel = viewModel()) {
     }
 
     BackHandler(enabled = vm.canGoBack) { vm.back() }
-    val reading = vm.screen is Screen.Reader || vm.screen is Screen.BookReader
+    val reading = vm.screen is Screen.Reader || vm.screen is Screen.BookReader || vm.screen is Screen.GalleryView
     ImmersiveMode(enabled = reading)
     RotationLock(enabled = reading && vm.rotationLocked)
 
@@ -90,6 +91,7 @@ fun HarbourRoot(vm: MainViewModel = viewModel()) {
                     is Screen.Reader -> ReaderScreen(vm, screen.comic)
                     is Screen.BookReader -> BookReaderScreen(vm, screen.book)
                     Screen.Browse -> FolderBrowserScreen(vm)
+                    is Screen.GalleryView -> GalleryViewer(vm, screen)
                 }
             }
         }

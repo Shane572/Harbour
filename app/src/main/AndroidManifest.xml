@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Set as wallpaper, from the gallery of saved pages -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+
     <!-- Harbour reads comics as plain files (Android's folder picker is broken on the tablet) -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"

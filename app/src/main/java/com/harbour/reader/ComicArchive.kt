@@ -25,6 +25,14 @@ abstract class ComicArchive : Closeable {
     open fun decodePage(index: Int, maxPixels: Long, config: Bitmap.Config = Bitmap.Config.ARGB_8888): Bitmap? =
         decodeImage(pageBytes(index), maxPixels, config)
 
+    /** A page's width and height without decoding the picture; null if it can't be read. */
+    open fun pageSize(index: Int): IntArray? = runCatching {
+        val bytes = pageBytes(index)
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+        if (o.outWidth > 0 && o.outHeight > 0) intArrayOf(o.outWidth, o.outHeight) else null
+    }.getOrNull()
+
     companion object {
         private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
 
@@ -61,6 +69,21 @@ abstract class ComicArchive : Closeable {
             return decodeImage(bytes, maxPixels, Bitmap.Config.ARGB_8888)
         }
 
+        /** The comic's ComicInfo.xml (issue details from tagging tools), if it has one. */
+        fun comicInfoBytes(file: File): ByteArray? {
+            if (isPdf(file.name)) return null
+            fun isInfo(name: String) =
+                name.substringAfterLast('/').substringAfterLast('\\').equals("ComicInfo.xml", ignoreCase = true)
+            if (isZip(file)) {
+                FileInputStream(file).use { s ->
+                    val e = MiniZip.readEntries(s.channel).firstOrNull { isInfo(it.name) } ?: return null
+                    if (e.size > 4L * 1024 * 1024) return null
+                    return MiniZip.read(s.channel, e)
+                }
+            }
+            return RarComic.fileBytes(file, ::isInfo)
+        }
+
         /** Many .cbr files are really zips with the wrong name, so check the file itself. */
         private fun isZip(file: File): Boolean = runCatching {
             FileInputStream(file).use { s ->
@@ -90,6 +113,10 @@ abstract class ComicArchive : Closeable {
  */
 private class PdfComic(private val pfd: ParcelFileDescriptor, private val renderer: PdfRenderer) : ComicArchive() {
     override val pageCount: Int get() = renderer.pageCount
+
+    override fun pageSize(index: Int): IntArray? = synchronized(renderer) {
+        runCatching { renderer.openPage(index).use { intArrayOf(it.width, it.height) } }.getOrNull()
+    }
 
     override fun decodePage(index: Int, maxPixels: Long, config: Bitmap.Config): Bitmap? = synchronized(renderer) {
         renderer.openPage(index).use { page ->
@@ -158,6 +185,13 @@ private class RarComic(private val pages: List<File>) : ComicArchive() {
 
     override fun pageBytes(index: Int): ByteArray = pages[index].readBytes()
 
+    // Unpacked pages are plain files, so the size comes from the picture's header alone.
+    override fun pageSize(index: Int): IntArray? {
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(pages[index].path, o)
+        return if (o.outWidth > 0 && o.outHeight > 0) intArrayOf(o.outWidth, o.outHeight) else null
+    }
+
     override fun close() = Unit
 
     companion object {
@@ -210,9 +244,14 @@ private class RarComic(private val pages: List<File>) : ComicArchive() {
                 true
             }
             val first = names.minWithOrNull(NaturalOrder) ?: return null
+            return fileBytes(file) { it == first }
+        }
+
+        /** The first file in the archive whose name matches, read into memory. */
+        fun fileBytes(file: File, match: (String) -> Boolean): ByteArray? {
             var bytes: ByteArray? = null
             readEntries(file) { name, archive ->
-                if (name == first) {
+                if (match(name)) {
                     val tmp = File.createTempFile("cover", ".img")
                     try {
                         extractTo(archive, tmp)
