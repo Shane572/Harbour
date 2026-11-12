@@ -58,10 +58,11 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme,
   `GallerySection` (Gallery page + full-screen `GalleryViewer`), `ComicInfoDialog`
 
-## Current state (build 34)
+## Current state (build 35)
 
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, Gallery, groups, Books, Settings) with
-hold-and-drag group reordering (`orderedGroups`, `reorderGroups`). Groups are made by hand
+hold-and-drag group reordering (`orderedGroups`, `reorderGroups`); the arrow by the GROUPS heading folds
+the list away (`groupsCollapsed`). Groups are made by hand
 (long-press to select, Add to group); one group per comic; `Group.coverKey` = Set as group cover.
 Home: Continue reading, 3 groups (most recently read first), Recently added. Tapping the sidebar
 GROUPS heading opens `Section.AllGroups` (every comic group with counts, New group). Search bar with

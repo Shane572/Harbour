@@ -38,6 +38,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -142,11 +144,23 @@ fun Sidebar(vm: MainViewModel) {
                         .clickable(enabled = expanded) { vm.show(Section.AllGroups) }
                         .padding(vertical = 10.dp),
                 )
+                // Folds the list of groups away (remembered).
+                IconButton(onClick = vm::toggleGroupsCollapsed, enabled = expanded) {
+                    Icon(
+                        if (vm.groupsCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                        contentDescription = if (vm.groupsCollapsed) "Show groups" else "Hide groups",
+                        tint = HarbourColors.Muted,
+                    )
+                }
                 IconButton(onClick = { newGroup = true }, enabled = expanded) {
                     Icon(Icons.Filled.Add, contentDescription = "New group", tint = HarbourColors.Muted)
                 }
             }
-            ReorderableGroups(vm, section, width, labels, Modifier.weight(1f))
+            if (vm.groupsCollapsed) {
+                Spacer(Modifier.weight(1f))
+            } else {
+                ReorderableGroups(vm, section, width, labels, Modifier.weight(1f))
+            }
 
             NavItem(painterResource(R.drawable.ic_book), "Books", section == Section.Books || section is Section.InBookGroup, width, labels) {
                 vm.show(Section.Books)

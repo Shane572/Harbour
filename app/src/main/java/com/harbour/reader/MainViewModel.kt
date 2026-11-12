@@ -296,6 +296,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // The sidebar's list of groups can be folded away.
+
+    var groupsCollapsed by mutableStateOf(settings.getBoolean("groupsCollapsed", false))
+        private set
+
+    fun toggleGroupsCollapsed() {
+        groupsCollapsed = !groupsCollapsed
+        settings.edit().putBoolean("groupsCollapsed", groupsCollapsed).apply()
+    }
+
     // Rotation lock while reading
 
     var rotationLocked by mutableStateOf(settings.getBoolean("rotationLocked", false))
