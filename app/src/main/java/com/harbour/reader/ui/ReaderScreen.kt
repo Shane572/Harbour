@@ -40,6 +40,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.foundation.gestures.scrollBy
+import kotlin.math.abs
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -221,7 +230,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
-        val double = mode != ReadingMode.Vertical &&
+        val double = !mode.continuous &&
             (vm.pageLayout == PageLayout.Double || (vm.pageLayout == PageLayout.Auto && landscape))
         val spreads = remember(count, double) { buildSpreads(count, double) }
         fun spreadOf(p: Int): Int = spreads.indexOfFirst { p in it }.coerceAtLeast(0)
@@ -229,30 +238,36 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
         // Recreated when the layout changes, starting from the page you were on.
         val pager: PagerState = key(spreads) { rememberPagerState(initialPage = spreadOf(page)) { spreads.size } }
         val list: LazyListState = key(mode) { rememberLazyListState(initialFirstVisibleItemIndex = page) }
-        val atEnd = if (mode == ReadingMode.Vertical) {
+        val atEnd = if (mode.continuous) {
             !list.canScrollForward && list.layoutInfo.totalItemsCount > 0
         } else {
             pager.currentPage == spreads.lastIndex
         }
 
-        if (mode == ReadingMode.Vertical) {
+        if (mode.continuous) {
             LaunchedEffect(list, count) {
                 snapshotFlow { if (!list.canScrollForward) count - 1 else list.firstVisibleItemIndex.coerceAtMost(count - 1) }
                     .collect { onPageShown(it) }
             }
-            VerticalReader(
-                archive = archive,
-                state = list,
-                next = next,
-                onNext = { n -> vm.switchToComic(n) },
-                onTap = { zone ->
-                    when (zone) {
-                        TapZone.Center -> showUi = !showUi
-                        TapZone.Left -> scope.launch { list.animateScrollBy(-constraints.maxHeight * 0.8f) }
-                        TapZone.Right -> scope.launch { list.animateScrollBy(constraints.maxHeight * 0.8f) }
-                    }
-                },
-            )
+            val vertical = mode == ReadingMode.Vertical
+            // A screenful (less a little overlap) along the strip, for the side taps.
+            val step = (if (vertical) constraints.maxHeight else constraints.maxWidth) * 0.8f
+            key(mode) {
+                ContinuousReader(
+                    archive = archive,
+                    state = list,
+                    vertical = vertical,
+                    next = next,
+                    onNext = { n -> vm.switchToComic(n) },
+                    onTap = { zone ->
+                        when (zone) {
+                            TapZone.Center -> showUi = !showUi
+                            TapZone.Left -> scope.launch { list.animateScrollBy(-step) }
+                            TapZone.Right -> scope.launch { list.animateScrollBy(step) }
+                        }
+                    },
+                )
+            }
         } else {
             val rtl = mode == ReadingMode.RightToLeft
             LaunchedEffect(pager, spreads) {
@@ -310,7 +325,7 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
             visible = showUi,
             modifier = Modifier.align(Alignment.BottomCenter),
             page = page,
-            spreadLabel = if (mode == ReadingMode.Vertical) {
+            spreadLabel = if (mode.continuous) {
                 null
             } else {
                 spreads[pager.currentPage.coerceIn(0, spreads.lastIndex)]
@@ -319,11 +334,11 @@ private fun ReaderContent(vm: MainViewModel, comic: Comic, archive: ComicArchive
             },
             count = count,
             rtl = mode == ReadingMode.RightToLeft,
-            next = if (atEnd && mode != ReadingMode.Vertical) next else null,
+            next = if (atEnd && !mode.continuous) next else null,
             onNext = { n -> vm.switchToComic(n) },
             onSeek = { target ->
                 scope.launch {
-                    if (mode == ReadingMode.Vertical) list.scrollToItem(target) else pager.scrollToPage(spreadOf(target))
+                    if (mode.continuous) list.scrollToItem(target) else pager.scrollToPage(spreadOf(target))
                 }
             },
         )
@@ -506,9 +521,19 @@ private fun ReadingOptions(
             Choice("Left to right", mode == ReadingMode.LeftToRight) { onMode(ReadingMode.LeftToRight) }
             Choice("Right to left", mode == ReadingMode.RightToLeft) { onMode(ReadingMode.RightToLeft) }
         }
-        Choice("Vertical scroll (webtoons)", mode == ReadingMode.Vertical) { onMode(ReadingMode.Vertical) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Choice("Vertical scroll", mode == ReadingMode.Vertical) { onMode(ReadingMode.Vertical) }
+            Choice("Horizontal scroll", mode == ReadingMode.Horizontal) { onMode(ReadingMode.Horizontal) }
+        }
+        if (mode.continuous) {
+            Text(
+                "Pinch or double-tap to zoom",
+                style = MaterialTheme.typography.labelSmall,
+                color = HarbourColors.Muted,
+            )
+        }
 
-        if (mode != ReadingMode.Vertical) {
+        if (!mode.continuous) {
             Spacer(Modifier.height(14.dp))
             OptionLabel("Pages", "Auto shows two pages side by side in landscape")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -567,57 +592,162 @@ private fun PageSpinner(modifier: Modifier) {
     }
 }
 
-/** Webtoon-style: every page stacked, fit to width, scrolled continuously. */
+/**
+ * Every page in one continuous strip: stacked and fit to width (vertical, for webtoons) or side by
+ * side and fit to height (horizontal). Pinch or double-tap to zoom. A committed zoom lays the pages
+ * out bigger (rather than just magnifying them) so scrolling still follows your finger 1:1; while
+ * pinching, the strip is magnified live around your fingers. When zoomed, one finger pans across
+ * the strip while the list scrolls along it.
+ */
 @Composable
-private fun VerticalReader(
+private fun ContinuousReader(
     archive: ComicArchive,
     state: LazyListState,
+    vertical: Boolean,
     next: Comic?,
     onNext: (Comic) -> Unit,
     onTap: (TapZone) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val currentOnTap by rememberUpdatedState(onTap)
-    var width by remember { mutableIntStateOf(0) }
-    LazyColumn(
-        state = state,
-        modifier = Modifier
+    var zoom by remember { mutableFloatStateOf(1f) } // committed: pages are laid out this much bigger
+    var pinch by remember { mutableFloatStateOf(1f) } // live, visual only, while fingers are down
+    var focal by remember { mutableStateOf(Offset.Zero) }
+    var pan by remember { mutableFloatStateOf(0f) } // across the strip, in px of the zoomed layout
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+
+    fun across(o: Offset) = if (vertical) o.x else o.y
+    fun along(o: Offset) = if (vertical) o.y else o.x
+    fun clampPan(p: Float, z: Float): Float {
+        val crossSize = if (vertical) viewport.width else viewport.height
+        return p.coerceIn(0f, (crossSize * (z - 1f)).coerceAtLeast(0f))
+    }
+
+    // Applies a zoom around a point on screen so whatever is under it stays put.
+    fun commitZoom(target: Float, at: Offset) {
+        val z = target.coerceIn(1f, 4f)
+        val r = z / zoom
+        pinch = 1f
+        if (abs(r - 1f) < 0.01f) return
+        val index = state.firstVisibleItemIndex
+        val offset = state.firstVisibleItemScrollOffset
+        pan = clampPan((pan + across(at)) * r - across(at), z)
+        zoom = z
+        scope.launch {
+            state.scrollToItem(index, 0)
+            state.scrollBy((offset + along(at)) * r - along(at))
+        }
+    }
+
+    Box(
+        Modifier
             .fillMaxSize()
-            .onSizeChanged { width = it.width }
+            .onSizeChanged { viewport = it }
+            // Pinch is caught before the list sees it, so two fingers zoom instead of scrolling.
+            .pointerInput(vertical) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var pinching = false
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val pressed = event.changes.count { it.pressed }
+                        if (pressed >= 2) {
+                            if (!pinching) {
+                                pinching = true
+                                focal = event.calculateCentroid(useCurrent = true)
+                            }
+                            pinch = (pinch * event.calculateZoom()).coerceIn(1f / zoom, 4f / zoom)
+                            event.changes.forEach { it.consume() }
+                        } else if (!pinching && zoom > 1.01f) {
+                            event.changes.firstOrNull { it.pressed }?.let { change ->
+                                pan = clampPan(pan - across(change.positionChangeIgnoreConsumed()), zoom)
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
+                    if (pinching) commitZoom(zoom * pinch, focal)
+                }
+            }
             .pointerInput(Unit) {
-                detectTapGestures { p ->
-                    currentOnTap(
-                        when {
-                            p.x < width * 0.3f -> TapZone.Left
-                            p.x > width * 0.7f -> TapZone.Right
-                            else -> TapZone.Center
-                        },
-                    )
+                detectTapGestures(
+                    onDoubleTap = { p -> commitZoom(if (zoom > 1.01f) 1f else 2.5f, p) },
+                    onTap = { p ->
+                        currentOnTap(
+                            when {
+                                p.x < size.width * 0.3f -> TapZone.Left
+                                p.x > size.width * 0.7f -> TapZone.Right
+                                else -> TapZone.Center
+                            },
+                        )
+                    },
+                )
+            }
+            // Gestures above read plain screen positions; the live pinch magnifies only what's drawn.
+            .clipToBounds()
+            .graphicsLayer {
+                scaleX = pinch
+                scaleY = pinch
+                if (size.width > 0f && size.height > 0f) {
+                    transformOrigin = TransformOrigin(focal.x / size.width, focal.y / size.height)
                 }
             },
     ) {
-        items(archive.pageCount, key = { it }) { index ->
-            val bmp = rememberPage(archive, index, PAGE_PIXELS)
-            if (bmp == null) {
-                PageSpinner(Modifier.fillMaxWidth().aspectRatio(0.66f))
+        // The strip is laid out [zoom] times the screen across, and shifted by the pan.
+        val strip = Modifier.layout { measurable, c ->
+            if (vertical) {
+                val w = (c.maxWidth * zoom).roundToInt()
+                val placeable = measurable.measure(Constraints.fixed(w, c.maxHeight))
+                layout(c.maxWidth, c.maxHeight) { placeable.place(-pan.roundToInt(), 0) }
             } else {
-                Image(
-                    bitmap = bmp,
-                    contentDescription = "Page ${index + 1}",
-                    contentScale = ContentScale.FillWidth,
-                    filterQuality = FilterQuality.High,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1)),
-                )
+                val h = (c.maxHeight * zoom).roundToInt()
+                val placeable = measurable.measure(Constraints.fixed(c.maxWidth, h))
+                layout(c.maxWidth, c.maxHeight) { placeable.place(0, -pan.roundToInt()) }
             }
         }
-        if (next != null) {
-            item(key = "next") {
-                Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
-                    NextButton(next, onNext)
+        if (vertical) {
+            LazyColumn(state = state, modifier = strip) {
+                items(archive.pageCount, key = { it }) { index ->
+                    StripPage(archive, index, vertical = true)
+                }
+                if (next != null) {
+                    item(key = "next") {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                            NextButton(next, onNext)
+                        }
+                    }
+                }
+            }
+        } else {
+            LazyRow(state = state, modifier = strip) {
+                items(archive.pageCount, key = { it }) { index ->
+                    StripPage(archive, index, vertical = false)
+                }
+                if (next != null) {
+                    item(key = "next") {
+                        Box(Modifier.fillMaxHeight().padding(horizontal = 48.dp), contentAlignment = Alignment.Center) {
+                            NextButton(next, onNext)
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/** One page of the strip: full width when stacked, full height when side by side. */
+@Composable
+private fun StripPage(archive: ComicArchive, index: Int, vertical: Boolean) {
+    val fill = if (vertical) Modifier.fillMaxWidth() else Modifier.fillMaxHeight()
+    val bmp = rememberPage(archive, index, PAGE_PIXELS)
+    if (bmp == null) {
+        PageSpinner(fill.aspectRatio(0.66f))
+    } else {
+        Image(
+            bitmap = bmp,
+            contentDescription = "Page ${index + 1}",
+            contentScale = if (vertical) ContentScale.FillWidth else ContentScale.FillHeight,
+            filterQuality = FilterQuality.High,
+            modifier = fill.aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1)),
+        )
     }
 }
 

@@ -104,7 +104,16 @@ enum class SortOrder(val label: String) { Title("Title"), Added("Recently added"
 
 enum class CoverSize(val label: String) { Small("Small"), Medium("Medium"), Large("Large") }
 
-enum class ReadingMode(val label: String) { LeftToRight("Left to right"), RightToLeft("Right to left"), Vertical("Vertical scroll") }
+enum class ReadingMode(val label: String) {
+    LeftToRight("Left to right"),
+    RightToLeft("Right to left"),
+    Vertical("Vertical scroll"),
+    Horizontal("Horizontal scroll"),
+    ;
+
+    /** Scrolling modes show every page in one strip instead of turning pages. */
+    val continuous: Boolean get() = this == Vertical || this == Horizontal
+}
 
 enum class PageLayout(val label: String) { Single("One"), Auto("Auto"), Double("Two") }
 
