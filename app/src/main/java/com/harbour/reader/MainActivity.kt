@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -64,6 +65,29 @@ import com.harbour.reader.ui.WelcomeScreen
 
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
+
+    // Volume buttons turn pages while reading a comic, if that's turned on in Reading options.
+    private fun pageKey(keyCode: Int): Int? {
+        // Comics, and PDF books (read in the same page-by-page reader); not EPUBs.
+        val paged = vm.screen is Screen.Reader || (vm.screen as? Screen.BookReader)?.book?.isPdf == true
+        if (!vm.volumeKeysTurnPages || !paged) return null
+        return when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN -> 1
+            KeyEvent.KEYCODE_VOLUME_UP -> -1
+            else -> null
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val direction = pageKey(keyCode) ?: return super.onKeyDown(keyCode, event)
+        if (event.repeatCount == 0) vm.turnPage(direction)
+        return true // and don't change the volume
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (pageKey(keyCode) != null) return true
+        return super.onKeyUp(keyCode, event)
+    }
 
     override fun onStop() {
         super.onStop()

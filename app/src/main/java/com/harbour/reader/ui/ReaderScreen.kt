@@ -185,8 +185,12 @@ fun ReaderScreen(vm: MainViewModel, comic: Comic, book: Book? = null) {
     }
 }
 
-/** Groups pages into what's shown at once: one page, or the cover alone then pairs. */
-private fun buildSpreads(count: Int, double: Boolean): List<IntArray> =
+/**
+ * Groups pages into what's shown at once: one page, or (two-page view) the cover alone then pairs.
+ * A page that's already a double spread ([alone]) is shown by itself rather than squeezed beside
+ * another, and pairing carries on after it, so the pages either side stay facing correctly.
+ */
+private fun buildSpreads(count: Int, double: Boolean, alone: (Int) -> Boolean): List<IntArray> =
     if (!double) {
         List(count) { intArrayOf(it) }
     } else {
@@ -194,8 +198,13 @@ private fun buildSpreads(count: Int, double: Boolean): List<IntArray> =
             add(intArrayOf(0))
             var i = 1
             while (i < count) {
-                add(if (i + 1 < count) intArrayOf(i, i + 1) else intArrayOf(i))
-                i += 2
+                if (alone(i) || i + 1 >= count || alone(i + 1)) {
+                    add(intArrayOf(i))
+                    i += 1
+                } else {
+                    add(intArrayOf(i, i + 1))
+                    i += 2
+                }
             }
         }
     }
@@ -295,7 +304,12 @@ private fun ReaderPages(
         val landscape = maxWidth > maxHeight
         val double = !mode.continuous &&
             (vm.pageLayout == PageLayout.Double || (vm.pageLayout == PageLayout.Auto && landscape))
-        val spreads = remember(count, double) { buildSpreads(count, double) }
+        // Which pages are already double spreads: read from every page's size once per comic, in the
+        // background, and only when two pages are shown at once.
+        val wide by produceState<BooleanArray?>(null, archive, double) {
+            if (double) value = withContext(Dispatchers.IO) { runCatching { vm.spreadsOf(comic, archive) }.getOrNull() }
+        }
+        val spreads = remember(count, double, wide, pages) { buildSpreads(count, double) { pages.isWholeSpread(it, wide) } }
         fun spreadOf(p: Int): Int = spreads.indexOfFirst { p in it }.coerceAtLeast(0)
 
         // Recreated when the layout changes, starting from the page you were on.
@@ -315,6 +329,7 @@ private fun ReaderPages(
             val vertical = mode == ReadingMode.Vertical
             // A screenful (less a little overlap) along the strip, for the side taps.
             val step = (if (vertical) constraints.maxHeight else constraints.maxWidth) * 0.8f
+            LaunchedEffect(list, step) { vm.pageTurns.collect { list.animateScrollBy(it * step) } }
             key(mode, pages) {
                 ContinuousReader(
                     archive = pages,
@@ -347,6 +362,9 @@ private fun ReaderPages(
                     forward -> showUi = true // at the end: show controls (and the next-issue button)
                 }
             }
+
+            // Volume buttons, if turned on: down for the next page, up for the one before.
+            LaunchedEffect(pager, spreads) { vm.pageTurns.collect { turn(forward = it > 0) } }
 
             HorizontalPager(
                 state = pager,
@@ -436,6 +454,8 @@ private fun ReaderPages(
                 onMode = onMode,
                 onLayout = vm::changePageLayout,
                 onFitWidth = vm::changeFitWidth,
+                volumeKeys = vm.volumeKeysTurnPages,
+                onVolumeKeys = vm::changeVolumeKeys,
                 finished = keepFinished,
                 onReset = ::resetProgress,
             )
@@ -619,6 +639,8 @@ private fun ReadingOptions(
     onMode: (ReadingMode) -> Unit,
     onLayout: (PageLayout) -> Unit,
     onFitWidth: (Boolean) -> Unit,
+    volumeKeys: Boolean,
+    onVolumeKeys: (Boolean) -> Unit,
     finished: Boolean,
     onReset: () -> Unit,
 ) {
@@ -662,6 +684,12 @@ private fun ReadingOptions(
                 Choice("Whole page", !fitWidth) { onFitWidth(false) }
                 Choice("Fit width", fitWidth) { onFitWidth(true) }
             }
+        }
+        Spacer(Modifier.height(14.dp))
+        OptionLabel("Volume buttons", "Down for the next page, up for the one before")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Choice("Change volume", !volumeKeys) { onVolumeKeys(false) }
+            Choice("Turn pages", volumeKeys) { onVolumeKeys(true) }
         }
         if (finished) ResetRow(onReset)
     }

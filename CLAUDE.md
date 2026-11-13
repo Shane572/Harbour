@@ -61,7 +61,7 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   vertical), `BookReaderScreen` (WebView, CSS-column paging), `FolderBrowserScreen`, `Dialogs`, theme,
   `GallerySection` (Gallery page + full-screen `GalleryViewer`), `ComicInfoDialog`
 
-## Current state (build 42)
+## Current state (build 43)
 
 Library: collapsible sidebar (Home, All comics, Will Read, Ungrouped, Gallery, groups, Books, Settings) with
 hold-and-drag group reordering (`orderedGroups`, `reorderGroups`); the arrow by the GROUPS heading folds
@@ -99,6 +99,10 @@ trimming is on. Gallery page is a staggered wall of saved pages, filter by group
 full-screen viewer (swipe, zoom) with Read from here (`vm.readFrom`, `takePendingStart`), About this
 issue, Set as wallpaper (home / lock / both), Rename (renames the file too) and Remove. About this issue is also the reader's info
 button and a one-comic selection action.
+
+Two-page view shows a page that's already a double spread on its own (`buildSpreads` + `isWholeSpread`,
+using `spreadsOf`), and keeps pairing after it. Volume buttons turn pages when on in Reading options
+(`volumeKeysTurnPages`; `MainActivity.onKeyDown` → `vm.pageTurns`; comics and PDFs, not EPUBs).
 
 Trim margins and Split spreads are global on/off icons in the reader top bar, like rotation lock
 (`trimMargins`, `splitSpreads`). Spread detection reads every page's size once per comic

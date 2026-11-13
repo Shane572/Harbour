@@ -14,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import com.harbour.reader.ui.AccentChoice
 import com.harbour.reader.ui.HarbourColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -983,6 +984,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun changePageLayout(l: PageLayout) {
         pageLayout = l
         settings.edit().putString("pageLayout", l.name).apply()
+    }
+
+    /** Volume buttons turn pages while reading a comic (down = next, up = back). */
+    var volumeKeysTurnPages by mutableStateOf(settings.getBoolean("volumeKeys", false))
+        private set
+
+    fun changeVolumeKeys(on: Boolean) {
+        volumeKeysTurnPages = on
+        settings.edit().putBoolean("volumeKeys", on).apply()
+    }
+
+    /** Page turns from the volume buttons: +1 next, -1 back. Only an open reader listens. */
+    val pageTurns = MutableSharedFlow<Int>(extraBufferCapacity = 4)
+
+    fun turnPage(direction: Int) {
+        pageTurns.tryEmit(direction)
     }
 
     fun changeFitWidth(on: Boolean) {

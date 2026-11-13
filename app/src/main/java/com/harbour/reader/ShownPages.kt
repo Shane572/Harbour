@@ -17,6 +17,12 @@ class ShownPages private constructor(
 
     override val pageCount: Int get() = parts.size
 
+    /** Whether a shown page is a whole double-page spread (from [wide], see [findSpreads]). */
+    fun isWholeSpread(index: Int, wide: BooleanArray?): Boolean {
+        val part = parts.getOrNull(index) ?: return false
+        return part.half == WHOLE && wide?.getOrNull(part.page) == true
+    }
+
     /** The file's page that a shown page comes from. */
     fun sourceOf(index: Int): Int = parts[index.coerceIn(0, parts.lastIndex)].page
 
