@@ -1,23 +1,23 @@
 # Harbour
 
-Shane's personal comic and book reader for his Android tablet (Honor Pad 8, MagicUI / Android 12).
+A personal comic and book reader for one Android 12 tablet (MagicUI).
 Kotlin + Jetpack Compose, single activity, no Android Studio needed: GitHub Actions builds
 the release APK on every push to `main` and publishes it as a GitHub Release (`build-N`,
 versionCode N). Release, not debug: debug Compose builds are noticeably slower on the tablet.
 
-## How Shane gets updates
+## How updates reach the tablet
 
 - Each push to `main` → `.github/workflows/build.yml` → release `build-N` marked latest.
 - Harbour checks `api.github.com/repos/Shane572/Harbour/releases/latest` on launch and shows
   **Update available**; one tap installs over the top (PackageInstaller session, `Updater.kt`).
 - The repo must stay **public** for that check to work without a login.
 - Signing uses the committed `app/harbour-debug.keystore` so every build installs as an update.
-  Never change or regenerate it, or Shane has to uninstall and lose his reading progress.
+  Never change or regenerate it, or the owner has to uninstall and lose their reading progress.
 - Put `[skip ci]` in a commit message for changes that shouldn't produce a release (docs, notes).
 
 ## Ground rules
 
-- Keep it simple. Shane wants fewer, working builds rather than process. No emulator tests.
+- Keep it simple. The owner wants fewer, working builds rather than process. No emulator tests.
 - Every build must open. Before pushing, read through the change for things that compile but
   break at runtime. Example that shipped once: the root composable and the `Application` class
   were both named `HarbourApp`; `setContent { HarbourApp() }` resolved to the class constructor
@@ -29,12 +29,11 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
   `file://` URIs; comics are opened straight from the file.
 - Compile locally before pushing when you can: `./gradlew assembleRelease` with `JAVA_HOME`
   set to a JDK 17 and `ANDROID_HOME` set to `%LOCALAPPDATA%\Android\Sdk`. Android Studio's
-  bundled JDK on Shane's PC is 25, which Gradle 8.11 can't run on. Gradle also needs
+  bundled JDK on the owner's PC is 25, which Gradle 8.11 can't run on. Gradle also needs
   `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=<short path without spaces>` on that PC.
 - Crashes are written to `filesDir/last_crash.txt` by `HarbourApp.kt` and shown on next launch
-  with a Copy button. Ask Shane to paste that when something breaks.
-- Only touch this repository. Shane also has a company GitHub org (Kinore-Engineering); never
-  read or change anything there.
+  with a Copy button. Ask the owner to paste that when something breaks.
+- Only touch this repository. Never read or change any other repository or GitHub organisation.
 
 ## Map
 
@@ -42,13 +41,13 @@ versionCode N). Release, not debug: debug Compose builds are noticeably slower o
 - `MainViewModel.kt` — `Screen` back stack, sidebar `Section`, library, groups, progress, settings
 - `Models.kt` — `Comic`, `Book` (both `LibraryItem`), `Group`, progress, setting enums
 - `LibraryRepository.kt` — saved folders, scanning for `.cbz`/`.cbr`/`.epub`, library caches
-- `GroupStore.kt` — Shane's own groups (`groups.json`). Groups are made by hand and are
+- `GroupStore.kt` — the owner's own groups (`groups.json`). Groups are made by hand and are
   deliberately unrelated to folders on disk; one group per comic.
 - `ComicArchive.kt` — CBZ via `MiniZip.kt`; CBR via libarchive, unpacked to `cache/cbr` (last 3 kept);
   PDF via Android's `PdfRenderer` (PDFs are books in the library)
 - `EpubBook.kt` — EPUB container/OPF/spine/contents parsing
 - `Guides.kt` — reading guides from `assets/guides.json`; `StepState` (read / skipped)
-- `ComicVine.kt` — step covers via Shane's own Comic Vine key (prefs `comicvine`, not backed up); covers
+- `ComicVine.kt` — step covers via the owner's own Comic Vine key (prefs `comicvine`, not backed up); covers
   saved in filesDir/guide_covers so each is fetched once. GCD covers are bot-protected: don't scrape them
 - `ComicInfo.kt` — ComicInfo.xml inside CBZ/CBR (series, credits, summary) for About this issue
 - `ShownPages.kt` — the reader's view of a comic: trimmed margins (`Trim`), split spreads; maps
@@ -79,7 +78,7 @@ group pages have a back arrow.
 Read order: per group (`Group.readOrder`), numbered at the top of the group page, drives Up next
 and Next issue. Edited by hold-and-drag on the group page (`readOrderDrag` in ComicsSection): the
 grid stays still, an accent bar marks the drop slot, change applied on release. Holding selects at
-the long-press (undone if you then drag); a drag needs ~24dp of movement. Shane found live
+the long-press (undone if you then drag); a drag needs ~24dp of movement. The owner found live
 reordering during drag and select-on-release both bad; don't go back to them.
 
 Backup (`Backup.kt`): prefs (settings, progress, book_progress, library) + groups.json to
@@ -111,24 +110,24 @@ Trim margins and Split spreads are global on/off icons in the reader top bar, li
 Messages are Harbour's own pill at the bottom (`HarbourRoot`), not Android toasts: on the tablet toasts
 came with a generic Android icon. Build 34 also deletes build 31's leftover voices (`clearOldVoices`).
 
-Guides (sidebar, checklist icon): Saved guides are Shane's own ChatGPT-refined lists (Teen Titans,
+Guides (sidebar, checklist icon): Saved guides are the owner's own ChatGPT-refined lists (Teen Titans,
 Wally West, JLA, Green Lantern, X-Men, Wonder Woman) stored word for word in `assets/guides.json`;
 only wording/layout was tidied. Don't change their runs, issues or order without asking. Steps are
 read (circle) or skipped (arrow-over icon; the one by a heading skips the whole part), in
 `guide_progress` prefs (in the backup); first untouched step = Up next. Tap a step or heading for its
-first issue's cover (Comic Vine); hold a step for the menu. No library matching: Shane rotates comics
-off the tablet and tracks it himself.
+first issue's cover (Comic Vine); hold a step for the menu. No library matching: the owner rotates comics
+off the tablet and tracks it themselves.
 
 Comic Vine browsing (builds 39–41: search, character/series/issue/creator pages, sorting) was removed at
-Shane's request: he wants Harbour to stay a reader. Only guide covers use Comic Vine now. Don't re-add a
-browse/Discover tab unless he asks.
+the owner's request: they want Harbour to stay a reader. Only guide covers use Comic Vine now. Don't re-add a
+browse/Discover tab unless they ask.
 
 Look: accent colours (incl. Crimson), dark/black, cover size, sort. Icons in `res/drawable`
-(Shane picked stacked comics for All comics, glasses for Will Read, stack of novels for Books,
+(The owner picked stacked comics for All comics, glasses for Will Read, stack of novels for Books,
 framed picture for Gallery, page-pulled-in for Trim, dashed-cut spread for Split).
 
-Not yet: text selection or footnote links in books. Shane doesn't want auto-grouping. He asked
+Not yet: text selection or footnote links in books. The owner doesn't want auto-grouping. They asked
 about AI character voices reading comics aloud: possible only online (vision model reads bubbles and
 speakers, paid TTS voices per character). Read aloud with free offline voices (Piper/Kokoro via
-sherpa-onnx, ML Kit for bubbles) was built in build 31 and reverted: Shane didn't like the voice stuff
-(Kokoro took ~30 s per line on the tablet). Don't bring it back unless he asks.
+sherpa-onnx, ML Kit for bubbles) was built in build 31 and reverted: the owner didn't like the voice stuff
+(Kokoro took ~30 s per line on the tablet). Don't bring it back unless they ask.
